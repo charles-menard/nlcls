@@ -1,0 +1,33 @@
+The following 7 files contain the program systems
+ENLSIP (for constrained nonlinear least squares)
+
+These files can be downloaded using some browser at URL-address
+ftp://ftp.cs.umu.se/pub/users/perl/ENLSIP.tar.gz
+This file should be unpacked by
+gunzip ENLSIP.tar.gz
+tar -xf ENLSIP.tar
+That should give you a directory ENLSIP with the files below included.
+
+The systems are described in a user's guide UMINF-109/110.84
+by Per Lindstroem, Institute of Information Processing,
+University of Umea, Sweden.
+The software is now written in double precision but the documentation
+has not been updated since the single precision version. The software
+has also been developed a great deal so there might be some trace
+printings that should be taken away.
+More details can be found in
+Wedin, Lindstroem: Methods and Software for Nonlinear Least
+Squares Problems, UMINF-133.87 (rev. July 1988, 1993) and in "Gauss-Newton
+based algorithms for constrained least squares problems" of which the last
+one can be downloaded from
+http://www.cs.umu.se/~perl/reports/alg.ps.gz
+
+Remember: Anything that comes free has no guarantee.
+
+README		This information
+dblenls.f	easy-to-use subroutine (see user's guide)
+dblmod2nls.f	routines used by dblenls.f
+dblredunls.f	routines used by dblenls.f
+dblwrkset.f	routines used by dblenls.f
+dblmain.f	example main program (see user's guide)
+fort.10		generated output from dblmain.f

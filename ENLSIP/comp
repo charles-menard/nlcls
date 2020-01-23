@@ -1,0 +1,1 @@
+f77 -O -o dblmain dblmain.f dblenls.f dblmod2nls.f dblredunls.f dblwrkset.f
