@@ -1,1 +1,3 @@
 verifier que les dnrm2 commencent a la bonne place
+ajouter les parametres mda, mdv etc car ils sont peut etre necessaire
+changer pour prendre en compte les parametres modifies car en fortran toute par ref
