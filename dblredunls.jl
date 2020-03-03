@@ -48,15 +48,17 @@ mutable struct Negdir
     ifree::Int
 end
 
-mutable struct Linc1_result
-    eta::Float64
-    tau::Float64
-    gamma::Float64
-    alfmax::Float64
-    alfmin::Float64
-    alfk::Float64
-    pmax::Float64
+#######
+# The struct below are used to simulate passing parameters by reference
+
+#######
+mutable struct Float64_wrapper
+    value::Float64
 end
+
+mutable struct Int_wrapper
+    value::Int
+
 """
 Compute the jacobian of the constraints and the residuals and put them
 respectively in `jac_constraints` and `jac_residuals`
@@ -1189,8 +1191,9 @@ end
 """
 Replaces subroutine ATSOLV
 """
-function solve_lower_triangular!(a::Array{Float64, 2}, t::Int, b::Array{Float64},
-                                 x::Array{Float64}, residue::Float64)
+function solve_t_times_t!(a::Array{Float64, 2}, t::Int, b::Array{Float64},
+                                 x::Array{Float64}, n::Int,
+                                 residue::Float64_wrapper)
     j = 0
     l = 0
     s1 = 0.0
@@ -1207,7 +1210,7 @@ function solve_lower_triangular!(a::Array{Float64, 2}, t::Int, b::Array{Float64}
             x[j] = (b[j] - s1) /a[j, j]
         end
     end
-    residue = norm(b[t+1:n])
+    residue.value = norm(b[t+1:n])
 end
 """
 Replaces the subroutine GRAD
@@ -1319,7 +1322,7 @@ function steplength!(current_point::Array{Float64},
     exit = 0
     alfkm1 = alfk
     ctrl = 1
-    psik = psi(current_point, search_direction, current_point_length, param.alfk,
+    psik = psi(current_point, search_direction, current_point_length, alfk,
                g, fnew, number_of_residuals, residuals!, hnew,
                number_of_active_constraints, number_of_constraints,
                active_constraints, constraints!, w, ctrl)
@@ -1333,13 +1336,13 @@ function steplength!(current_point::Array{Float64},
     diff = psi_at_zero - psik
     #linc2()
     if diff >= 0.0
-        xmin = linc1_res.alfk
+        xmin = alfk
     else
         xmin = 0.0
     end
     #minrm()
-    if (alkp1 != linc1_res.beta && pk > pbeta &&
-        linc1_res.beta <= linc1_res.alfk)
+    if (alkp1 != beta && pk > pbeta &&
+        beta <= alfk)
         alfkp1 = 0.0
         psikm1 = psi_at_zero
     end
@@ -1420,12 +1423,543 @@ function linc2(m::Int, n::Int, v1::Array{Float64},
                  alfk)
     end
 end
+######
+# after here i've changed the parameters that are changed by their function
+# to struct
+#####
+
 """
 Replaces the subroutine REDC
 
 """
 function reduce()
+end
+
 """
-Replaces the subroutine LINC1
-Set some constants for the subroutine compute_steplength
+Replaces the subroutine PREGN
 """
+function gn_previous_step(s::Array{Float64}, sn::Float64, b::Array{Float64},
+                          mindim::Int, prank::Int, dim::Int_wrapper)
+    smax = 0.2
+    rmin = 0.5
+    m1 = prank - 1
+    k = mindim
+    if mindim > m1
+        dim.value = k
+        return
+    end
+    for i = mindim:m1
+        k = m1 - i + mindim
+        if s[k] < smax * sn && b[k] > rmin * bn
+            dim.value = k
+            return
+        end
+        dim.value = max(mindim, prank -1)
+    end
+end
+"""
+Replaces the subroutine PRESUB
+"""
+function subspace_minimization(s::Array{Float64}, b::Array{Float64}, bn::Float64,
+                               rabs::Float64, prank::Int, km1rnk::Int,
+                               pgress::Float64, prelin::Float64, asprev::Float64,
+                               alfkm1::Float64, dim::Int_wrapper)
+    stepb = 0.2
+    pgb1 = 0.3
+    pgb2 = 0.1
+    predb = 0.7
+    rlenb = 2.0
+    c2 = 100.0
+    if (alkm1 < stepb && pgress <= (pgb1 * prelin ^ 2) &&
+        pgress <= /(pgb2 * asprev ^ 2))
+        dim.value = max(1, km1rnk - 1)
+        if km1rnk > 1 && b[dim.value] > rabs * bn
+            return
+        end
+        dim.value = km1rnk
+    end
+    if b[dim.value] > predb * bn && rlenb * s[dim.value] < s[dim.value + 1]
+        return
+    end
+
+    # TEST POSSIBLE RANK DEFICIENCY
+    if c2 * s[dim.value] < s[dim.value + 1]
+        return
+    end
+    i1 = km1rnk + 1
+    for i = i1:prank
+        dim.value = i
+        if b[i] > predb * bn
+            return
+        end
+    end
+end
+
+
+        """
+Replaces the subroutine JACDIF
+"""
+function jacobian_forward_diff(current_point::Array{Float64},
+                               current_point_dim::Int,
+                               current_residuals::Array{Float64},
+                               number_of_residuals::Int, residuals!::Function,
+                               jacobian::Array{Float64, 2},
+                               leading_dim_jacobian::Int, w1::Array{Float64},
+                               user_stop::Float64_wrapper)
+    delta = sqrt(eps(Float64))
+    xtemp = 0.0
+    ctrl = Int_wrapper(0)
+    delta_j = 0.0
+    for j = 1:current_point_dim
+        xtemp = current_point[j]
+        delta_j = max(abs(xtemp), 1.0) * delta
+        current_point[j] = xtemp + delta_j
+        ctrl.value = -1
+        residuals!(current_point, current_point_dim, w1, number_of_residuals,
+                   ctrl, jcobian, leading_dim_jacobian)
+        if ctrl.value <= -10
+            user_stop.value = ctrl.value
+            return
+        end
+        for i = 1:number_of_residuals
+            jacobian[i, j] = (w1[i] - current_residuals[i]) / delta_j
+        end
+    end
+end
+
+"""
+Replaces the subroutine LSOLVE
+"""
+function lower_triangular_solve(n::Int, a::Array{Float64, 2}, b::Array{Float64})
+    sum = 0.0
+    if n <= 0
+        return
+    end
+    b[1] /= a[1, 1]
+    if n == 1
+        return
+    end
+    jm = 0
+    for j = 2:n
+        sum = b[j]
+        jm = j - 1
+        for k = 1:jm
+            sum -= a[j, k] * b[k]
+        end
+        b[j] = sum / a[j, j]
+    end
+end
+
+"""
+Replaces the subroutine USOLVE
+puts the solution in b
+"""
+function upper_triangular_solve(n::Int, a::Array{Float64, 2}, b::Array{Float64})
+    s = 0.0
+    nm = n - 1
+    j = 0
+    jp = 0
+    if n <= 0
+        return
+    end
+    b[n] /= a[n, n]
+    if n == 1
+        return
+    end
+    for jc = 1:nm
+        j = n - jc
+        s = b[j]
+        jp = j + 1
+        for k = jp:n
+            s -= a[j, k] * b[k]
+        end
+        b[j] = s / a[j, j]
+    end
+end
+
+
+"""
+Replaces the subroutine YCOMP
+"""
+function d_minus_c1_times_x1(kp1::Int, kq::Int, d::Array{Float64},
+                             c1::Array{Float64, 2}, x1::Array{Float64})
+    sum = 0.0
+    if kq <= 0 || kp1 <= 0
+        return
+    end
+    for j = 1:kq
+        sum = 0.0
+        for k = 1:kp1
+            sum += c1[j, k] * x1[k]
+        end
+        d[j] -= sum
+    end
+end
+
+
+"""
+Replaces the subroutine JTRJ
+(maybe faster to just do g = g' *g but uses more memory)
+"""
+function g_transpose_times_g!(g::Array{Float64, 2}, n::Int,
+                             work_area::Array{Float64})
+    sum = 0.0
+    for j = 1:n
+        for i = 1:n
+            work_area[i] = g[i, j]
+        end
+        for k = j:n
+            sum = 0.0
+            for i = 1:n
+                sum += g[i, k] * work_area[i]
+            end
+            g[k, j] = sum
+        end
+    end
+end
+
+"""
+Replaces the subroutine NEWTON
+"""
+function newton_search_direction(residuals!::Function, constraints!::Function,
+                                 current_point::Array{Float64},
+                                 number_of_parameters::Int, c::Array{Float64},
+                                 leading_dim_c::Int, number_of_residuals::Int,
+                                 rank_c2::Int,
+                                 current_residuals::Array{Float64},
+                                 p3::Array{Int}, d3::Array{Float64},
+                                 estimated_lagrange_mult::Array{Float64},
+                                 a::Array{Float64, 2}, leading_dim_a::Int,
+                                 active_constraints::Array{Int},
+                                 number_of_active_constraints::Int, rank_a::Int,
+                                 d1::Array{Float64}, p1::Array{Int},
+                                 p2::Array{Int}, d2::Array{Float64},
+                                 b::Array{Float64},
+                                 current_constraints::Array{Float64},
+                                 number_of_constraints::Int,
+                                 leading_dim_fmat::Int, pivot::Array{Float64},
+                                 gmat::Array{Float64, 2}, leading_dim_gmat::Int,
+                                 search_direction::Array{Float64},
+                                 number_of_eval::Int_wrapper, error::Int_wrapper,
+                                 fmat::Array{Float64, 2}, d::Array{Float64},
+                                 v1::Array{Float64}, v2::Array{Float64})
+    tp1 = rank_a + 1
+    nmt = n - t
+    nmr = n - rank_a
+    for i = 1:number_of_residuals
+        d[i] = -current_residuals[i]
+    end
+    p3utq3(p3, nmt, c[1,tp1], leading_dim_c, d3, nmr, d, number_of_residuals,
+           1,v2))
+    p3utq3(p3, nmt, c[1,tp1], leading_dim_c, d3, nmr, c, number_of_residuals,
+           rank_a, v2)
+    if rank_a != 3
+        for i = 1:rank_a
+            search_direction[i] = b[i]
+        end
+        if number_of_active_constraints == rank_a
+            #lsolve(leading_dim_a, number_of_active_constraints, a,
+            #search_direction)
+        elseif number_of_active_constraints > rank_a
+            #usolve(leading_dim_gmat, rank_a, gmat, search_direction)
+        end
+    end
+    c2tc2(c[1, tp1], leading_dim_c, nmr, p3, nmt, v2)
+    #hessf(residuals!, gmat, leading_dim_gmat, current_point,
+    #number_of_parameters, current_residuals, v1, v2, number_of_residuals,
+    #error)
+
+    if error.value <= -10
+        return
+    end
+    number_of_eval.value = 2 * number_of_parameters * (number_of_parameters + 1)
+
+    if number_of_active_constraints != 0
+        #hessh(constraints!, gmat, leading_dim_gmat, current_point,
+        #number_of_parameters, v, active_constraints,
+        #number_of_active_constraints, v1, v2, number_of_constraints, error)
+        ecomp(p2, a, leading_dim_a, number_of_parameters, d1, pivot, rank_a,
+              number_of_active_constraints, gmat, leading_dim_gmat)
+    end
+    w_plus_c(gmat[tp1, 1], c, nmr, number_of_parameters) 
+    if rank_a != 0
+        ycomp()
+    end
+    j = 0
+    for i = 1:nmr
+        j = rank_a + i
+        search_direction[j] = d[i]
+    end
+    info = Int_wrapper(0)
+    #dchdc()
+    error.value = 0
+    if nmr != info.value
+        error.value = -3
+        return
+    end
+    #dposl()
+    if number_of_active_constraints != rank_a
+        p_times_v(p2, rank_a, search_direction,  1)
+    end
+    if rank_a == 0
+        return
+    end
+    for i = 1:rank_a
+        j = rank_a - i + 1
+        #householder_transform()
+    end
+end
+
+"""
+Replaces the subroutine P3UTQ3
+"""
+function p3utq3(p3::Array{Int}, nmt::Int, c2::Array{Float64 ,2},
+                leading_dim_c::Int, d3::Array{Float64}, rank_c2::Int,
+                c::Array{Float64, 2}, number_of_residuals::Int, rank_a::Int,
+                v2::Array{Float64})
+    if rank_c2 > 0
+        for i = 1:rank_c2
+            #householder_transform()
+        end
+        sum = 0.0
+        for j = 1:rank_a
+            for k = 1:rank_c2
+                v2[k] = c[k, j]
+            end
+            for i = 1:rank_c2
+                sum = 0.0
+                for k = 1:i
+                    sum += c2[k, i] * v2[k]
+                end
+                c[i, j] = sum
+            end
+        end
+    end
+    p_times_v(p3, nmt, c, rank_a)
+    #60
+"""
+Replaces the subroutine C2TC2
+"""
+function c2tc2(c2::Array{Float64, 2}, leading_dim_c2, rank_c2::Int,
+               p3::Array{Int}, nmt::Int, v2::Array{Float64})
+    k = 0
+    if rank_c2 > 1
+        for i = 2, rank_c2
+            k = i - 1
+            for j = 1:k
+                c2[i, j] = 0.0
+            end
+        end
+    end
+    v_times_p_transpose(p3, nmt, c2, rank_c2)
+    #jtrj()
+end
+
+"""
+Replaces the subroutine ECOMP
+"""
+function ecomp(p2::Array{Int}, a::Array{Float64 , 2}, leading_dim_a::Int, n::Int,
+               d1::Array{Float64}, pivot::Array{Float64}, rank_a::Int, t::Int,
+               gmat::Array{Float64}, leading_dim_gmat)
+    for i = 1:rank_a
+        #householder_transform()
+    end
+    for i = 1:rank_a
+        #householder_transform()
+    end
+    if t == rank_a
+        return
+    end
+    p_transpose_times_v(p2, rank_a, gmat, rank_a)
+    v_times_p(gmat, rank_a, rank_a, p2)
+end
+"""
+Replaces the subroutine WCOMP
+w and c are nmt*n (but with different leading dimension)
+"""
+function w_plus_c(w::Array{Float64, 2}, c::Array{Float64, 2}, nmt::Int, n::Int)
+    for i = 1:nmt
+        for j = 1:n
+            w[i,j] += c[i, j]
+        end
+    end
+end
+
+"""
+Replaces the subroutine HSUM
+"""
+function constraints_merit(active_constraints::Array{Int}, t::Int,
+                           h::Array{Float64}, w::Array{Float64}, l::Int)
+
+    sum = 0.0
+    hval = 0.0
+    if l <= 0
+        return
+    end
+    for j = 1:l
+        if !(j in active[1:t])
+            hval = min(0.0, h[j])
+        else
+            hval = h[j]
+        end
+        hsum+= w[j]* (hval ^ 2)
+    end
+    return hsum
+end
+
+"""
+Replaces the subroutine UNSCR
+"""
+function unscramble_array(active_constraints::Array{Int}, bnd::Int, l::Int,
+                          p::Int)
+    lm= = l - p
+    if lmp <= 0
+        return
+    end
+    j = 0
+    for i = 1:lmp
+        j = bnd + i
+        if active_constraints[j] == -1
+            active_constraints[j] = 0
+        elseif active_constraints >= 2
+            active_constraints[j] = 1
+        end
+    end
+end
+
+
+"""
+Replaces the subroutine PREOBJ
+"""
+function preobj(c::Array{Float64, 2}, m::Int, rank_a::Int, dx::Array{Float64},
+                f::Array{Float64}, t::Int, fc1dy1::Float64_wrapper,
+                c1dy1::Float64_wrapper)
+    velem = 0.0
+    fc1dy1.value = 0.0
+    c1dy1.value = 0.0
+    if t <= 0
+        return
+    end
+    for i = 1:m
+        velem = 0.0
+        for j = 1:rank_a
+            velem += c[i,j] * dx[j]
+        end
+        fc1dy1.value += f[i] * velem
+        c1dy1.value += velem ^ 2
+    end
+end
+:
+
+"""
+Replaces the subroutine NZESTM
+lm = lagrange multiplier
+"""
+function nonzero_first_order_lm(a::Array{Float64}, rank_a::Int,
+                                number_of_active_constraints::Int,
+                                b::Array{Float64}, v::Array{Float64},
+                                w::Array{Float64}, u::Array{Float64})
+    w[i] = copy(b[i])
+    #lsolve(rank_a, a, w)
+    solve_t_times_t!(a, rank_a, w, u, number_of_active_constraints,
+                          Float64_wrapper)
+    v .+= u
+end
+
+    
+    
+"""
+Replaces the subroutine LEAEST
+"""
+function lagrange_multipliers_estimate(a::Array{Float64, 2},
+                                       number_of_active_constraints::Int,
+                                       current_residuals::Array{Float64},
+                                       number_of_residuals::Array{Float64},
+                                       v1::Array{Float64},
+                                       c::Array{Float64, 2},
+                                       p1::Array{Int},
+                                       scale::Int,scaling_matrix::Array{Float64},
+                                       v2::Array{Float64}, v::Array{Float64},
+                                       lm_residual::Float64_wrapper)
+
+    if number_of_active_constraints <= 0
+        return
+    end
+    sum = 0.0
+    for j = 1:number_of_active_constraints
+        sum = 0.0
+        for i = 1:number_of_residuals
+            sum += c[i,j] * (current_residuals[i] + v1[i])
+        end
+        v2[j] = sum
+    end
+    solve_t_times_t!(a, number_of_active_constraints, v2, v,
+                           number_of_active_constraints, lm_residual)
+    p_times_v(p=p1, m=number_of_active_constraints, v=v, n=1)
+    if scale == 0
+        return
+    end
+    for i = 1:number_of_active_constraints
+        v[i] *= scaling_matrix[i]
+    end
+end
+"""
+Replaces the subroutine EUCMOD
+"""
+function minimize_euclidean_norm(ctrl::Int, old_penalty_constants::Array{Float64},
+                                 number_of_constraints::Int,
+                                 positive_elements_l::Array{Int},
+                                 number_of_pos_elements_l::Int,
+                                 y::Array{Float64}, tau::Float64,
+                                 new_penalty_constants::Array{Float64},
+                                 working_area::Array{Float64})
+    if number_of_pos_elements_l <= 0
+        return
+    end
+    working_area = copy(old_penalty_constants)
+    y_norm = norm(y[1:number_of_constants])
+    y_norm_sq = y_norm ^ 2
+    if y_norm != 0.0
+        y[1:n] = 1.0: ./(y_norm * y[1:n])
+    end
+    tau_new = tau
+    sum = 0.0
+    nrunch = number_of_constants
+    istop = 0
+    constant = 0.0
+    k = 0
+    i = 0
+    prod = 0.0
+    while true
+        tau_new -= sum
+        if y_norm_sq == 0.0
+            constant = 1.0
+        else
+            constant = tau_new / y_norm_sq
+        end
+        y_norm_sq = 0.0
+        sum = 0.0
+        istop = nrunch
+        k = 1
+        while k <= nrunch
+            i = positive_element_l[k]
+            prod = constant * y[k] * y_norm
+            if prod >= working_area [i]
+                old_penalty_constants[i] = prod
+                y_norm_sq += y[k] ^ 2
+                k += 1
+                continue
+            end
+            sum += old_penalty_constant[i] * y[k] * y_norm
+            for j = k:nrunch
+                positive_elements_l[j] = positive_elements_l[j+1]
+                y[j] = y[j+1]
+            end
+            nrunch -= 1
+        end
+        y_norm_sq *= y_norm ^ 2
+        if nrunch <= 0 || ctrl == 2 || istop == nrunch
+            break
+        end
+    end
+end
