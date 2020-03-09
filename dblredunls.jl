@@ -49,15 +49,16 @@ mutable struct Negdir
 end
 
 #######
-# The struct below are used to simulate passing parameters by reference
+# The wrapper below is used to simulate passing parameters by reference
 
 #######
-mutable struct Float64_wrapper
-    value::Float64
+mutable struct Number_wrapper{T<:Number}
+    value::T
 end
 
-mutable struct Int_wrapper
-    value::Int
+Base.copy(w::Number_wrapper{T}) = Number_wrapper(w.value)
+
+
 
 """
 Compute the jacobian of the constraints and the residuals and put them
@@ -504,7 +505,7 @@ end
 """
 Replaces the subroutine SCALV
 
-    vector = 1 ./ (factor*vector)
+    vector = vector ./ factor
 """
 
 
@@ -712,7 +713,7 @@ function l_to_upper_triangular(a::Array{Float64, 2}, rank_a::Int,
 end
 
 """
-from here i included the parameters for the size of unknown arrays
+from here I included the parameters for the size of unknown arrays
 """
 """
 Replaces the subroutine ATOLOW
@@ -1038,9 +1039,11 @@ end
 Replaces subroutine CQHP2
 """
 function c_q1_h_p2_product(time::Int, c::Array{Float64, 2}, leading_dim_c::Int,
-                           m::Int, n::Int, t::Int, pseudo_rank_a::Int, pivot::Array{Float64}, na::Int,
-                           a::Array{Float64}, leading_dim_a::Int, d1::Array{Float64},
-                           h::Array{Float64, 2}, leading_dim_h::Int, p2::Array{Int}, v::Array{Float64})
+                           m::Int, n::Int, t::Int, pseudo_rank_a::Int,
+                           pivot::Array{Float64}, na::Int, a::Array{Float64},
+                           leading_dim_a::Int, d1::Array{Float64},
+                           h::Array{Float64, 2}, leading_dim_h::Int,
+                           p2::Array{Int}, v::Array{Float64})
 
     if na == 0
         return
@@ -1193,7 +1196,7 @@ Replaces subroutine ATSOLV
 """
 function solve_t_times_t!(a::Array{Float64, 2}, t::Int, b::Array{Float64},
                                  x::Array{Float64}, n::Int,
-                                 residue::Float64_wrapper)
+                                 residue::Number_wrapper{Float64})
     j = 0
     l = 0
     s1 = 0.0
@@ -1230,14 +1233,14 @@ end
 """
 Replaces the subroutine QUAMIN
 """
-function minimize_quadratic_function!(x1::Float64, y1::Float64, x2::Float64,
+function minimize_quadratic!(x1::Float64, y1::Float64, x2::Float64,
                                      y2::Float64, x3::Float64, y3::Float64,
-                                     min_of_f::Float64)
+                                     min_of_f::Number_wrapper{Float64})
     d1 = y3 - y1
     d2 = y2 - y1
     s = (x2 - x1) * (x2 - x1) * d1 - (x3 - x1) * (x3 - x1) * d2
     q = 2.0 * ((x2 - x1) * d2 - (x3 - x1) * d1)
-    min_of_f = x - s / q
+    min_of_f.value = x - s / q
 end
 
 """
@@ -1425,21 +1428,558 @@ function linc2(m::Int, n::Int, v1::Array{Float64},
 end
 ######
 # after here i've changed the parameters that are changed by their function
-# to struct
+# to Number_wrapper
 #####
 
 """
 Replaces the subroutine REDC
 
 """
-function reduce()
+function reduce(alpha::Number_Wrapper{Float64},
+                psi_at_alpha::Number_wrapper{Float64}, alpha_k::Float64,
+                pk::Float64, diff::Float64, eta::Float64,
+                current_point::Float64, p::Array{Float64},
+                current_residuals::Array{Float64},
+                next_point::Array{Float64}, next_residuals::Array{Float64},
+                number_of_residuals::Int, n::Int, residuals!::Function,
+                current_constraints::Array{Float64},
+                next_constraints::Array{Float64}, constraints!::Function,
+                t::Int, l::Int, active_constraints::Array{Int},
+                w::Array{Float64}.
+                k::Number_wrapper{Int}, psi_k::Float64,
+                reduction_likely::Number_wrapper{Bool})
+    ctrl = 0
+    if psi_at_alpha - pk >= eta * diff
+        for i = 1:number_of_residuals
+            current_residuals[i] = next_residuals[i]
+        end
+        if l != 0
+            for i = 1:l
+                current_constraints[i] = next_constraints[i]
+                end
+        end
+        ctrl = -1
+        psi_k = psi(current_point, p, n, alpha_k, next_point, next_residuals,
+                    number_of_residuals, residuals!, t, l,
+                    active_constraints, constraints!, w, ctrl)
+        if ctrl < -10
+            k.value = ctrl
+        end
+        if k < 0
+            return
+        end
+        k += 1
+        reduce.value = true
+        if !(psi_at_alpha - psi_k < eta * diff) &&
+            (psi_k > delta * psi_at_alpha)
+            return
+        end
+        if psi_at_alpha <= psi_k
+            reduce.value = false
+            return
+        end
+        alpha.value = alpha_k
+        psi_at_alpha.value = psi_k
+    end
+    for i = 1:number_of_residuals
+        current_residuals[i] = next_residuals[i]
+    end
+    if l == 0
+        reduce.value = false
+        return
+    end
+    for i = 1:l
+        current_constraints[i] = next_constraints[i]
+    end
+    reduce.value = false
+end
+
+
+"""
+Replaces the subroutine GAC
+"""
+function goldstein_armijo_condition(current_point::Array{Float64},
+                                    p::Array{Float64}, f::Array{Float64}, m::Int,
+                                    n::Int, residuals!::Function,
+                                    constraints!::Function,
+                                    current_constraints::Array{Float64},
+                                    active_constraints::Array{Float64},
+                                    t::Int, l::Int, w::Array{Float64}, k::Int,
+                                    alpha_lower_bound::Float64,
+                                    exit::Number_wrapper{Int},
+                                    next_point::Array{Float64},
+                                    next_residuals::Array{Float64},
+                                    psi_at_zero::Float64, dpsi_at_zero::Float64,
+                                    u::Number_wrapper{Float64},
+                                    psi_At_u::Number_Wrapper{Float64},
+                                    tau::Float64, pmax::Float64,
+                                    relative_precision::Float64
+                                    )
+    ctrl = -1
+    sqrrel = sqrt(relative_precision)
+    psix = psi_at_zero
+    x = u
+    k = 0
+    while true
+        if pmax * x < sqrrel || x <= alpha_lower_bound
+            exit.value = -2
+        end
+        if exit.value = -2
+            break
+        end
+        x *= 0.5
+        psix = psi(current_point, p, n, x, next_point, current_residuals,
+                       m, residuals!, current_constraints, t, l,
+                       active_constraints, constraints!, w, ctrl)
+        if psix > psi_at_zero + tau * dpsi_at_zero
+            break
+        end
+    end
+    u.value = x
+    psi_at_u.value = psix
 end
 
 """
+Replaces the subroutine LINC1
+"""
+function linc1(p::Array{Float64}, n::Int, alpha::Float64,
+               alpha_lower_bound::Float64, alpha_upper_bound::Float64,
+               eta::Number_wrapper{Float64}, tau::Number_wrapper{Float64},
+               gamma::Number_wrapper{Float64}, alpha_min::Number_wrapper{Float64},
+               alpha_max::Number_wrapper{Float64},
+               alpha_k::Number_wrapper{Float64}, pmax::Number_wrapper{Float64})
+    eta.value = 0.3
+    tau.value = 0.25
+    gamma.value = 0.4
+    alpha_max.value = alpha_lower_bound
+    alpha_min.value = alpha_upper_bound
+    alpha_k.value = min(alpha, alpha_max.value)
+    pmax.value = maximum(abs, p)
+end
+
+"""
+Replaces the subroutine MINRN
+"""
+function minrn!(x::Float64, fx::Float64, w::Float64, fw::Float64, v::Float64,
+               fv::Float64, alpha_lower_bound::Float64,alpha_upper_bound::Float64,
+               pmax::Float64, relative_precision::Float64,
+               u::Number_wrapper{Float64}, fu::Number_wrapper{Float64})
+    eps = sqrt(relative_precision) / pmax
+    u.value = x
+    pu.value = fx
+    if abs(v - x) < eps || abs(w - x) < eps || abs (w - v) < eps
+        return
+    end
+    minimize_quadratic!(x, fx, w, fw, v, fv, u)
+    u.value = clamp(u.value, alpha_lower_bound, alpha_upper_bound)
+    t1 = (u.value - x) * (u.value - v) * fw / (w - x) / (w - v)
+    t2 = (u.value - w) * (u.value - v) * fx / (x - w) / (x - v)
+    t3 = (u.value - w) * (u.value - x) * fv / (v - x) / (v - w)
+    pu.value = t1 + t2 + t3
+end
+
+"""
+Replaces the subroutine UPDATE
+"""
+function update(x::Number_wrapper{Float64}, fx::Number_wrapper{Float64},
+                w::Number_wrapper{Float64}, fw::Number_wrapper{Float64},
+                v::Number_wrapper{Float64}, fv::Float64,
+                u::Float64)
+    x.value = w.value
+    fx.value = fw.value
+    w.value = v.value
+    fw.value = fv
+    v.value = u
+end
+
+
+"""
+Replaces the subroutine MINRM1
+"""
+function minrm1(v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
+                m::Int, sqnv0::Number_wrapper{Float64},
+                sqnv1::Number_wrapper{Float64}, sqnv2::Number_wrapper{Float64},
+                scv0v1::Number_wrapper{Float64}, scv0v2::Number_wrapper{Float64},
+                scv1v2::Number_wrapper{Float64})
+    v0_norm = norm(v0])
+    v1_norm = norm(v1])
+    v2_norm = norm(v2])
+    sqnv0.value = v0_norm ^ 2
+    sqnv1.value = v1_norm ^ 2
+    sqnv2.value = v2_norm ^ 2
+    if v0_norm != 0.0
+        v0 ./= v0_norm
+    elseif v1_norm != 0.0
+        v1 ./= v1_norm
+    elseif v2_norm != 0.0
+        v2 ./= v2_norm
+    end
+    sc1, sc2, sc3 = 0.0, 0.0, 0.0
+    for i = 1:m
+        sc1 += v0[i] * v1[i]
+        sc2 += v0[i] * v2[i]
+        sc3 += v1[i] * v2[i]
+    end
+    scv0v1.value = sc1 * v0_norm * v1_norm
+    scv0v2.value = sc2 * v0_norm * v2_norm
+    scv1v2.value = sc2 * v1_norm * v2_norm
+    if v0_norm != 0.0
+        v0 .*= v0_norm
+    elseif v1_norm != 0.0
+        v1 .*= v1_norm
+    elseif v2_norm != 0.0
+        v2 .*= v2_norm
+    end
+end
+
+        """
+Replaces the subroutine MINRM
+"""
+function minimize_v_polynomial(v0::Array{Float64}, v1::Array{Float64},
+                               v2::Array{Float64}, m::Int,
+                               alpha_lower_bound::Float64,
+                               alpha_upper_bound::Float64,
+                               xmin::Float64, x::Number_wrapper{Float64},
+                               px::Number_wrapper{Float64},
+                               y::Number_wrapper{Float64},
+                               py:::Number_wrapper{Float64})
+
+    eps = 1.0e-4 
+    sqnv0 = Number_wrapper(0.0)
+    sqnv1 = Number_wrapper(0.0)
+    sqnv2 = Number_wrapper(0.0)
+    scv0v1 = Number_wrapper(0.0)
+    scv0v2 = Number_wrapper(0.0)
+    scv1v2 = Number_wrapper(0.0)
+    a1div3 = Number_wrapper(0.0)
+    x1 = Number_wrapper(0.0)
+    x2 = Number_wrapper(0.0)
+    x3 = Number_wrapper(0.0)
+    delta = Number_wrapper(0.0)
+    p = Number_wrapper(0.0)
+    q = Number_wrapper(0.0)
+    #minrm1(v0,v1,v2,m,sqnv0,sqnv1,sqnv2,scv0v1,scv0v2,scv1v2)
+
+    beta = 2.0 * scv0v2.value + sqnv1.value
+    b2 = 3.0 * scv1v2.value
+    b3 = 2.0 * sqnv2
+    pprim = third_degree_pol(scv0v1.value, beta, b2, b3, xmin)
+    pbiss = beta + 6.0 * scv1v2.value * xmin + 6.0 * sqnv2.value * xmin ^ 2
+    h0 = abs(pprim / pbiss)
+    dm = (abs(6.0 * scv1v2.value + 12.0 * sqnv2.value * xmin) 
+          + 24.0 * h0 * sqnv2.value)
+    hm = max(h0, 1.0)
+    if pbiss <= 20.0 * hm * dm
+        #minrm2(sqnv1,sqnv2,scv0v1,scv0v2,scv1v2,p,q,delta,a1div3)
+        if delta >= 0.0
+            oner(q.value, delta.value, a1div3.value, x)
+            y.value = x.value
+            #goto 100
+        end
+        twor(p.value, q.value, delta.value, a1div3.value, x1, x2, x3)
+        choose(x1.value, x2.value, x3.value, xmin, v0, v1, v2, m,
+               x, y, py)
+        #goto100
+    end
+    delta.value = 1.0
+    x0 = xmin
+    error = 0.0
+    k = 0
+    while k == 0 || (error > eps && k < 3)
+        pprim = third_degree_pol(scv0v1.value, beta, b2, b3, x0)
+        pbiss = beta + 6.0 * scv1v2.value * x0 + 6.0 * sqnv2 * x0 * x0
+        d = -pprim / pbiss
+        x.value = x0 + d
+        error = 2.0 * dm * d * d / abs(pbiss)
+        x0 = x.value
+        k += 1
+    end
+    y.value = x.value
+
+    x.value = clamp(x.value, alpha_lower_bound, alpha_upper_bound)
+    px.value = fourth_degree_pol(v0 v1, v2, m, x.value)
+    y.value = clamp(y.value, alpha_lower_bound, alpha_upper_bound)
+    if delta.value < 0.0
+        return
+    end
+    y.value = x.value
+    py.value = px.value
+end
+
+"""
+Replaces the subroutine ONER
+"""
+function oner(q::Float64, delta::Float64, a1div3::Float64,
+              x::Number_wrapper{Float64})
+    
+    sqd = sqrt(delta)
+    arg1 = (-q / 2.0 + sqd)
+    s1 = copysign(1.0, arg1)
+    arg2 = (-q / 2.0 - sqd)
+    s2 = copysign(1.0, arg2)
+    a3rd = 1.0 / 3.0
+    t = s1 * abs(arg1) ^ a3rd + s2 * abs(arg2) ^ a3rd
+    x.value = t - a1div3
+end
+
+"""
+Replaces the subroutine TWOR
+"""
+function twor(p::Float64, q::Float64, delta::Float64, a1div3::Float64,
+              x1::Number_wrapper{Float64}, x2::Number_wrapper{Float64},
+              x3::Number_wrapper{Float64})
+    
+    eps = 1.0e-8
+    sqd = sqrt(delta)
+    if abs(q) <= 2.0 * eps * sqd
+        fi = pi / 2.0
+    else
+        tanfi = abs(2.0 * sqd / q)
+        fi = atan(tanfi)
+    end
+    t = 2.0 * sqrt(-p / 3.0)
+    if q > 0.0
+        t = -t
+    end
+    x1.value = t * cos(fi / 3.0) - a1div3
+    x2.value = t * cos((fi + 2.0 * pi) / 3.0) - a1div3
+    x3.value = t * cos((fi + 4.0 * pi) / 3.0) - a1div3
+end
+
+
+
+"""
+Replaces the subroutine CHOOSE
+
+"""
+function choose(x1::Float64, x2::Float64, x3::Float64, xmin::Float64,
+                v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
+                m::Int, root1::Number_wrapper{Float64},
+                root2::Number_wrapper{Float64}, proot2::Number_wrapper{Float64})
+    order = sort([x1, x2, x3])
+    if xmin <= order[2]
+        root1 = order[1]
+        root2.value = order[3]
+    else
+        root1.value = order[3]
+        root2.value = order[1]
+    end
+    proot2.value = fourth_degree_pol(v0, v1, v2, m, root2.value)
+
+
+"""
+Replaces the function POL4
+"""
+function fourth_degree_pol(v0::Array{Float64}, v1::Array{Float64},
+                           v2::Array{Float64}, m::Int, x::Float64)
+    s = 0.0
+    p = 0.0
+    for i = 1:m
+        p = v0[i] + x * (v1[i] + v2[i] * x)
+        s += p * p
+    end
+    return 0.5 * s
+end
+
+
+"""
+Replaces the function POL3
+"""
+function third_degree_pol(a0::Float64, a1::Float64, a2::Float64, a3::Float64,
+                          x::Float64)
+    return a0 + x* (a1 + x * (a2 + a3 * x))
+
+"""
+Replaces the function psi
+"""
+function psi(current_point::Array{Float64}, p::Array{Float64},
+             current_point_dim::Int, alfk::Float64, next_point::Array{Float64},
+             next_residuals::Array{Float64}, number_of_residuals::Int,
+             residuals!::Function, next_constraints::Array{Float64},
+             t::Int, l::Int, active_constraints::Array{Int},
+             constraints!::Function, w::Array{Float64},
+             ctrl::Int})
+    psi = 0.0 # what happens if we return without initialising psi
+    for i = 1:current_point_dim
+        next_point[i] = current_point[i] + alfk * p[i]
+    end
+    fctrl = Number_wrapper(ctrl)
+    dummy = Array{Float64, 2}
+    residuals!(next_point, next_point_dim, next_residuals, number_of_residuals,
+              fctrl, dummy, 1)
+    hctrl = c Number_wrapper(ctrl)
+    if ctrl.value != 1
+        if -1 == fctrl.value && -1 == hctrl.value
+            psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
+                   + constraints_merit(active_constraints, t,
+            next_constraints, w, l))
+        end
+        if fctrl.value < -10 || hctrl.value < -10
+            ctrl.value = min(fctrl.value, hctrl.value)
+        end
+        return psi
+    end
+    if fctrl.value == 1 && hctrl.value == 1
+        psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
+               + constraints_merit(active_constraints, t, next_constraints,
+        w, l))
+    else
+        ctrl.value = -1
+    end
+    return psi
+end
+
+
+    
+"""
+The subroutine PERMIN can be replaced by
+PERMIN(P, N) => p = 1:n
+"""
+
+"""
+Replaces the subroutine HESSH
+"""
+function hessian_constraints(constraints!:Function, b:Array{Float64, 2},
+                             leading_dim_b::Int, current_point::Array{Float64},
+                             current_point_dim::Int, v::Array{Float64},
+                             active_constraints::Array{Float64}, t::Int,
+                             f1::Array{Float64}, f2::Array{Float64}, m::Int,
+                             ier::Number_wrapper{Int})
+
+    ier.value = 0
+    ctrl = Number_wrapper(-1)
+    eps2 = eps(Float64) ^ (1.0 / 3.0)
+    eps1 = eps2
+    xk = 0.0
+    epsk = 0.0
+    epsj = 0.0
+    xj = 0.0
+    dummy = Array{Float64, 2} #check if this is the right type
+    sum = 0.0
+    for k = 1:current_point_dim
+        xk = current_point[k]
+        epsk = max(abs(xk), 1.0) ^ eps2
+        for j = 1:k
+            xj = current_point[j]
+            epsj = max(abs(xj), 1.0) ^ eps1
+            current_point[k] = xk +epsk
+            residuals!(current_point, current_point_dim, f1, m, ctrl, dummy, 1)
+            if ctrl.value < -10
+                @goto break_outer_loop
+            end
+            current_point[k] = xk
+            current_point[j] = xj
+            current_point[k] = xk + epsk
+            current_point[j] -= epsj
+            residuals!(current_point, current_point_dim, f2, m, ctrl, dummy, 1)
+            if ctrl.value < -10
+                @goto break_outer_loop
+            end
+            f1_plus_c_times_f2(f1, -1.0, f2, m)
+            current_point[k] = xk
+            current_point[j] = xj
+            current_point[k] = xk - epsk
+            current_point[j] += epsj
+            residuals!(current_point, current_point_dim, f2, m, ctrl, dummy, 1)
+            if ctrl.value < -10
+                @goto break_outer_loop
+            end
+            f1_plus_c_times_f2(f1, -1.0, f2, m)
+            current_point[k] = xk
+            current_point[j] = xj
+            current_point[k] = xk - epsk
+            current_point[j] -= epsj
+            residuals!(current_point, current_point_dim, f2, m, ctrl, dummy, 1)
+            if ctrl.value < -10
+                @goto break_outer_loop
+            end
+            f1_plus_c_times_f2(f2, 1.0, f2, m)
+            current_point[k] = xk
+            current_point[j] = xj
+            sum = 0.0
+            for l = 1:m
+                sum += f1[l] /(4.0 * epsk * epsj) * v[l]
+            end
+            b[k, j] = sum
+            if k == j
+                continue
+            end
+            b[j, k] = sum
+        end
+    end
+    @label break_outer_loop
+    ier.value = ctrl.value
+end
+
+"""
+Replaces the subroutine  PRESS
+"""
+function f1_plus_c_times_f2_active(f1::Array{Float64},
+                                   active_constraints::Array{Int}, t::Int,
+                                   c::Float64, f2::Array{Float64})
+    k = 0
+    for i = 1:t
+        k = active_constraints[i]
+        f1[i] += c * f2[k]
+    end
+end
+
+"""
+Replaces the subroutine PLUS
+"""
+function f1_plus_c_times_f2(f1::Array{Float64}, c::Float64,
+                            f2::Array{Float64}, m::Int)
+    for i = 1:m
+        f1[i] += c * f2[i]
+    end
+end
+
+
+"""
+Replaces the subroutine CHDER
+"""
+function check_derivative(psi_derivative_at_zero::Float64, psi_at_zero::Float64,
+                          current_point::Array{Float64},
+                          search_direction::Array{Float64},
+                          number_of_residuals::Int, current_point_dim::Int,
+                          residuals!::Function, active_constraints::Array{Int},
+                          number_of_active_constraints::Int,
+                          penalty_weight::Array{Float64},
+                          number_of_constraints::Int, constraints!::Function,
+                          number_of_eval::Number_wrapper{Int},
+                          exit::Number_wrapper{Int}, next_point::Array{Float64},
+                          next_residuals::Array{Float64},
+                          next_constraints::Array{Float64},
+                          alfk::Float64, psi_at_alfk::Float64,)
+    ctrl = -1
+    #psimk = psi(xold,p,n,-alfk,xnew,fnew,m,ffunc,hnew,t,l,active,
+    #                  2        hfunc,w,ctrl)
+    if ctrl < -10
+        number_of_eval.value = ctrl
+    elseif number_of_eval.value < 0
+        return
+    end
+    number_of_eval.value += 1
+
+    dpsifo = (psi_at_alfk - psi_derivative_at_zero) / alfk
+    dpsiba = (psi_derivative_at_zero - psimk) / alfk
+    dpsice = (psi_at_alfk - psimk) / 2.0 / alfk
+    maxdif = abs(dpsifo - dpsiba)
+    maxdif = max(maxdif, abs(dpsifo - dpsice))
+    maxdif = max(maxdif, abs(dpsiba - dpsice))
+    if abs(dpsifo - dpsize) > maxdif && abs(dpsice - dpsize) > maxdif
+        exit.value = -1
+    end
+end
+
+
+end
+"""
 Replaces the subroutine PREGN
 """
+
 function gn_previous_step(s::Array{Float64}, sn::Float64, b::Array{Float64},
-                          mindim::Int, prank::Int, dim::Int_wrapper)
+                          mindim::Int, prank::Int, dim::Number_wrapper{Int})
     smax = 0.2
     rmin = 0.5
     m1 = prank - 1
@@ -1463,7 +2003,7 @@ Replaces the subroutine PRESUB
 function subspace_minimization(s::Array{Float64}, b::Array{Float64}, bn::Float64,
                                rabs::Float64, prank::Int, km1rnk::Int,
                                pgress::Float64, prelin::Float64, asprev::Float64,
-                               alfkm1::Float64, dim::Int_wrapper)
+                               alfkm1::Float64, dim::Number_wrapper{Int})
     stepb = 0.2
     pgb1 = 0.3
     pgb2 = 0.1
@@ -1505,10 +2045,10 @@ function jacobian_forward_diff(current_point::Array{Float64},
                                number_of_residuals::Int, residuals!::Function,
                                jacobian::Array{Float64, 2},
                                leading_dim_jacobian::Int, w1::Array{Float64},
-                               user_stop::Float64_wrapper)
+                               user_stop::Number_wrapper{Float64})
     delta = sqrt(eps(Float64))
     xtemp = 0.0
-    ctrl = Int_wrapper(0)
+    ctrl = Number_wrapper{Int}(0)
     delta_j = 0.0
     for j = 1:current_point_dim
         xtemp = current_point[j]
@@ -1640,7 +2180,8 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
                                  leading_dim_fmat::Int, pivot::Array{Float64},
                                  gmat::Array{Float64, 2}, leading_dim_gmat::Int,
                                  search_direction::Array{Float64},
-                                 number_of_eval::Int_wrapper, error::Int_wrapper,
+                                 number_of_eval::Number_wrapper{Int},
+                                 error::Number_wrapper{Int},
                                  fmat::Array{Float64, 2}, d::Array{Float64},
                                  v1::Array{Float64}, v2::Array{Float64})
     tp1 = rank_a + 1
@@ -1690,7 +2231,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         j = rank_a + i
         search_direction[j] = d[i]
     end
-    info = Int_wrapper(0)
+    info = Number_wrapper{Int}(0)
     #dchdc()
     error.value = 0
     if nmr != info.value
@@ -1832,8 +2373,8 @@ end
 Replaces the subroutine PREOBJ
 """
 function preobj(c::Array{Float64, 2}, m::Int, rank_a::Int, dx::Array{Float64},
-                f::Array{Float64}, t::Int, fc1dy1::Float64_wrapper,
-                c1dy1::Float64_wrapper)
+                f::Array{Float64}, t::Int, fc1dy1::Number_wrapper{Float64},
+                c1dy1::Number_wrapper{Float64})
     velem = 0.0
     fc1dy1.value = 0.0
     c1dy1.value = 0.0
@@ -1862,7 +2403,7 @@ function nonzero_first_order_lm(a::Array{Float64}, rank_a::Int,
     w[i] = copy(b[i])
     #lsolve(rank_a, a, w)
     solve_t_times_t!(a, rank_a, w, u, number_of_active_constraints,
-                          Float64_wrapper)
+                          Number_wrapper{Float64})
     v .+= u
 end
 
@@ -1880,7 +2421,7 @@ function lagrange_multipliers_estimate(a::Array{Float64, 2},
                                        p1::Array{Int},
                                        scale::Int,scaling_matrix::Array{Float64},
                                        v2::Array{Float64}, v::Array{Float64},
-                                       lm_residual::Float64_wrapper)
+                                       lm_residual::Number_wrapper{Float64})
 
     if number_of_active_constraints <= 0
         return
