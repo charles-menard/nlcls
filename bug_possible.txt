@@ -1,3 +1,7 @@
 verifier que les dnrm2 commencent a la bonne place
-ajouter les parametres mda, mdv etc car ils sont peut etre necessaire
+norm avec stride array
 checker que les int/float wrapper qui sont passe en parametres a d'autres methodes puissent etre lu (.value)
+j'ai peut-etre change des if consecutifs par des elseif ce qui est pas bon si le premier if change la valeur de la condition du deuxieme if
+regarder les appels a psi pour etre sur que le parametre ctrl est un Number_wrapper
+appel a householder_transform : le parametres pivot_vector est une matrice alors comment ca marche si pivot_vector=c2[1,k] (dans orthogonal_projection)
+appel a pv dans sub_search_direction v est sense etre une matrice on lui passe search_direction qui est un vecteur
