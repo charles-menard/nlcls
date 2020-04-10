@@ -1,60 +1,5 @@
 using Printf
 using LinearAlgebra
-"""
-Replaces the common variable block PREC
-"""
-mutable struct Last_two_points
-    rkakm2::Int
-    rkckm2::Int
-    kodkm2::Int
-    rkakm1::Int
-    rkckm1::Int
-    kodkm1::Int
-    tkm2::Int
-    tkm1::Int
-    betkm2::Float64
-    d1km2::Float64
-    dkm2::Float64
-    fsqkm2::Float64
-    hsqkm2::Float64
-    b1km2::Float64
-    dxnkm2::Float64
-    alfkm2::Float64
-    betkm1::Float64
-    d1km1::Float64
-    dkm1::Float64
-    fsqkm1::Float64
-    hsqkm1::Float64
-    b1km1::Float64
-    dxnkm1::Float64
-    alfkm1::Float64
-    pgress::Float64
-    prelin::Float64
-end
-"""
-Replaces common variable block BACK
-"""
-mutable struct Restart_steps
-    bestrk::Float64
-    bestpg::Float64
-    nrrest::Int
-    lattry::Int
-end
-"""
-Replaces common variable block negdir
-"""
-mutable struct Negdir
-    ifree::Int
-end
-
-#######
-# The wrapper below is used to simulate passing parameters by reference
-
-#######
-mutable struct Number_wrapper{T<:Number}
-    value::T
-end
-
 
 """
 Replaces the subroutine NEWPNT
@@ -165,8 +110,9 @@ C     SCALE THE SYSTEM  A*DX = B    IF SO INDICATED BY FORMING
 C     A@D=DIAG*A      B@D=DIAG*B
 """
 function scale_system(scale::Int, jacobian::Array{Float64,2},
-                       leading_dim_jacobian::Int, number_of_active_constraints,
-                       number_of_parameters::Int,
+                      leading_dim_jacobian::Int,
+                      number_of_active_constraints::Int64,
+                      number_of_parameters::Int,
                        neg_constraints::Array{Float64},
                        scaling_matrix::Array{Float64})
 
@@ -198,8 +144,8 @@ end
 """
 Replaces the subroutine GNSRCH
 """
-function gn_seach(fmat_is_identity::Int, a::Array{Float64,2},
-                  leading_dim_a::Int, number_of_constraints::Int,
+function gn_search(fmat_is_identity::Int, a::Array{Float64,2},
+                  leading_dim_a::Int, number_of_active_constraints::Int,
                   number_of_parameters::Int, d1::Array{Float64}, p1::Array{Int},
                   rank_a::Int, number_of_householder::Int, b::Array{Float64},
                   fmat::Array{Float64,2}, leading_dim_f::Int,
@@ -207,7 +153,7 @@ function gn_seach(fmat_is_identity::Int, a::Array{Float64,2},
                   leading_dim_jac_residuals::Int,
                   current_residuals::Array{Float64},pivot::Array{Float64},
                   tau::Float64, leading_dim_g::Int, scale::Int,
-                  diag::Array{Float64,2}, inactive_constraints::Array{Int},
+                  diag::Array{Float64}, inactive_constraints::Array{Int},
                   number_of_inactive_constraints::Int, p4::Array{Float64,2},
                   p2::Array{Int}, p3::Array{Int},
                   gn_direction::Array{Float64}, v1::Array{Float64},
@@ -248,7 +194,9 @@ function gn_seach(fmat_is_identity::Int, a::Array{Float64,2},
                          p4, rank_c2.value, code, scale, diag, d, gn_direction,
                          v1, d1_norm, d_norm, b1_norm, work_area_u)
 end
-
+"""
+Replaces the subroutine MINMAX
+"""
 function min_max_langrange_mult(number_of_equality_constraints::Int64,
                                 number_of_active_constraints::Int64,
                                 estimated_lagrange_mult::Array{Float64},
@@ -472,9 +420,9 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
         end
     end
     #??????
-    p_times_v()
+    p_times_v(p2, nmt, view(search_direction, rank_a+1:number_of_parameters), 1)
     if code != 1
-        #pv()
+        p_times_v(p2, rank_a, search_direction, 1)
     end
     if deleted_constraints > 2 || (deleted_constraints !== 3 || length(b) != 0)
         h_times_x(fmat, leading_dim_f, number_of_parameters, search_direction,
@@ -530,8 +478,9 @@ function upper_bound_steplength(a::Array{Float64, 2},
                                 number_of_active_constraints::Int64,
                                 number_of_parameters::Int64,
                                 current_constraints::Array{Float64},
-                                inactive_constraints::Array{Int64}, p4::Array{Int64},
-                                v1::Array{Float64}, number_of_residuals::Int64,
+                                inactive_constraints::Array{Int64},
+                                p4::Array{Int64}, v1::Array{Float64},
+                                number_of_residuals::Int64,
                                 search_direction::Array{Float64},
                                 upper_bound::Number_wrapper{Float64},
                                 upper_bound_cons_index::Number_wrapper{Int64})
@@ -649,6 +598,14 @@ Replaces the subroutine SCALV
 
     vector ./= factor
 """
+function scale_vector(v::Array{Float64}, factor::Float64, n::Int64)
+    if factor == 0.0 || isinf(factor)
+        return
+    end
+    for i = 1:n
+        v[i] /= factor
+    end
+end
 
 """
 Replaces the subroutine EVREST
@@ -675,7 +632,8 @@ function evaluation_restart(current_point::Array{Float64},
                             sq_sum_constraints::Number_wrapper{Float64},
                             dim_a::Int64, error::Number_wrapper{Int64},
                             restart::Number_wrapper{Bool}, ltp::Last_two_points,
-                            restart_steps::Restart_steps, negdir::Negdir)
+                            restart_steps::Restart_steps,
+                            ifree::Number_wrapper{Int64})
 
     if (restart_steps.lattry != 0 || restart_steps.bestpg <= 0.0 ||
         (-1 != error.value && error.value > -3))
@@ -719,8 +677,9 @@ function evaluation_restart(current_point::Array{Float64},
             if error.value < 0
                 return
             end
-            sq_sum_constraints.value = sum(x -> x ^ 2,
-            current_constraints[active_constraints])
+            sq_sum_constraints.value = sum_sq_active_constraints(
+                current_constraints, active_constraints,
+                number_of_active_constraints)
             ltp.hsqkm2 = sq_sum_constraints.value
             sq_sum_residuals.value = norm(current_residuals)^2
         else -1 == error.value
@@ -857,7 +816,8 @@ Replaces the subroutine LTOUP
 """
 function l_to_upper_triangular(a::Array{Float64, 2}, leading_dim_a::Int64,
                                rank_a::Int64, number_of_parameters::Int64,
-                               b::Array{Float64}, leading_dim_g, p2::Array{Int64},
+                               b::Array{Float64}, leading_dim_g::Int64,
+                               p2::Array{Int64},
                                gmat::Array{Float64,2}, d2::Array{Float64})
 
     p2[1:rank_a] = [1:rank_a]
@@ -898,10 +858,12 @@ end
 Replaces the subroutine ATOLOW
 """
 function a_to_lower_triangular(number_of_rows_a::Int64, length_g::Int64,
+                               p1::Array{Int64},
                                a::Array{Float64, 2}, leading_dim_a::Int64,
-                               tol::Float64, current_gradient::Array{Float64},
-                               p1::Array{Int64}, pseudo_rank_a::Number_wrapper{Int64},
-                               d1::Array{Float64})
+                               tol::Float64, pseudo_rank_a::Number_wrapper{Int64},
+                               d1::Array{Float64},
+                               current_gradient::Array{Float64})
+    
     pseudo_rank_a.value = number_of_rows_a
     if number_of_rows_a == 0
         return
@@ -1238,11 +1200,11 @@ end
     Replaces the subroutine GIVEN2
 """
 
-function apply_rotation(c::Float64, s::Float64, x::Number_wrapper{Float64},
-                        y::Number_wrapper{Float64})
-    xt = c * x.value + s * y.value
-    y.value = s * x.value - c * y.value
-    x.value = xt
+function apply_rotation(c::Float64, s::Float64, x::Array{Float64},
+                        y::Array{Float64})
+    xt = c * x[1] + s * y[1]
+    y[1] = s * x[1] - c * y[1]
+    x[1] = xt
 end
 """
 Replaces subroutine PSPECF
@@ -1408,8 +1370,9 @@ Replaces subroutine REORD
 function reorder(a::Array{Float64, 2},
                  number_of_active_constraints::Number_wrapper{Int64},
                  number_of_variables::Int64, bv::Array{Float64},
-                 row_of_l_to_delete::Int64, s::Int64, active_constraints::Array{Int64},
-                 inactive_constraints::Int64,
+                 row_of_l_to_delete::Int64, s::Int64,
+                 active_constraints::Array{Int64},
+                 inactive_constraints::Array{Int64},
                  number_of_inactive_constraints::Number_wrapper{Int64},
                  p4::Array{Int64}, working_area::Array{Float64},scale::Int64,
                  scaling_matrix::Array{Float64})
@@ -1530,7 +1493,7 @@ end
 """
 Replaces the subroutine LINEC
 """
-function steplength(current_point::Array{Float64},
+function linesearch_steplength(current_point::Array{Float64},
                     search_direction::Array{Float64},
                     current_residuals::Array{Float64}, v1::Array{Float64},
                     number_of_residuals::Int64, current_point_dim::Int64,
@@ -2246,6 +2209,93 @@ PERMIN(P, N) => p = [1:n]
 """
 
 """
+Replaces the subroutine HESSF
+"""
+function hessian_residuals(residuals!::Function, hessian::Array{Float64, 2},
+                           leading_dim_h::Int64, current_point::Array{Float64},
+                           number_of_parameters::Int64, v::Array{Float64},
+                           f1::Array{Float64}, f2::Array{Float64},
+                           number_of_residuals::Array{Float64},
+                           user_stop::Number_wrapper{Int64})
+    user_stop.value = 0
+    ctrl = Number_wrapper(-1)
+    third = 1.0 / 3.0
+    eps_2 = eps(Float64) ^ third
+    eps_1 = eps_2
+    x_k = 0.0
+    x_j = 0.0
+    eps_k = 0.0
+    eps_j = 0.0
+    dummy = Array{Float64, 2}
+    sum = 0.0
+    for k = 1:number_of_parameters
+        x_k = current_point[k]
+        eps_k = max(abs(x_k), 1.0) * eps_2
+        for j = 1:k
+            x_j = current_point[j]
+            eps_j = max(abs(x_j), 1.0) * eps_1
+            current_point[k] = x_k + eps_k
+            current_point[j] += eps_j
+            residuals!(current_point, number_of_parameters, f1,
+                       number_of_residuals, ctrl, dummy, 1)
+            if ctrl.value < -10
+                user_stop.value = ctrl.value
+                return
+            end
+            current_point[k] = x_k
+            current_point[j] = x_j
+            current_point[k] = x_k + eps_k
+            current_point[j] -= eps_j
+            residuals!(current_point, number_of_parameters, f2,
+                       number_of_residuals, ctrl, dummy, 1)
+            if ctrl.value < -10
+                user_stop.value = ctrl.value
+                return
+            end
+            f1_plus_c_times_f2(f1, -1.0, f2, number_of_residuals)
+            current_point[k] = x_k
+            current_point[j] = x_j
+            current_point[k] = x_k - eps_k
+            current_point[j] + eps_j
+            residuals!(current_point, number_of_parameters, f2,
+                       number_of_residuals, ctrl, dummy)
+            if ctrl.value < -10
+                user_stop.value = ctrl.value
+                return
+            end
+            f1_plus_c_times_f2(f1, -1.0, f2, number_of_residuals)
+            current_point[k] = x_k
+            current_point[j] = x_j
+            current_point[k] = x_k - eps_k
+            current_point[j] -= eps_j
+            residuals!(current_point, number_of_parameters, f2,
+                       number_of_residuals, ctrl, dummy, 1)
+            if ctrl.value < -10
+                user_stop.value = ctrl.value
+                return
+            end
+            f1_plus_c_times_f2(f1, 1.0, f2, number_of_residuals)
+            current_point[k] = x_k
+            current_point[j] = x_j\
+            sum = 0.0
+            for l = 1:number_of_residuals
+                sum += f1[l] / (4.0 * eps_k * eps_j) * v[l]
+            end
+            hessian[k, j] = sum
+            if k == j
+                continue
+            end
+            hessian[j, k] = sum
+        end
+    end
+    return
+end
+
+
+            
+
+end
+"""
 Replaces the subroutine HESSH
 """
 function hessian_constraints(constraints!::Function, b::Array{Float64, 2},
@@ -2552,7 +2602,7 @@ end
 Replaces the subroutine JTRJ
 (maybe faster to just do g = g' *g but uses more memory)
 """
-function g_transpose_times_g!(g::Array{Float64, 2}, n::Int64,
+function g_transpose_times_g(g::Array{Float64, 2}, n::Int64,
                              work_area::Array{Float64})
     sum = 0.0
     for j = 1:n
@@ -2615,11 +2665,13 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         elseif number_of_active_constraints > rank_a
             upper_triangular_solve(rank_a, gmat, search_direction)
         end
+        if rank_a == number_of_parameters
+            @goto compute_search_direction
     end
     c2tc2(c[1, tp1], leading_dim_c, nmr, p3, nmt, v2)
-    #hessf(residuals!, gmat, leading_dim_gmat, current_point,
-    #number_of_parameters, current_residuals, v1, v2, number_of_residuals,
-    #error)
+    hessf(residuals!, gmat, leading_dim_gmat, current_point,
+          number_of_parameters, current_residuals, v1, v2, number_of_residuals,
+          error)
 
     if error.value <= -10
         return
@@ -2627,9 +2679,9 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
     number_of_eval.value = 2 * number_of_parameters * (number_of_parameters + 1)
 
     if number_of_active_constraints != 0
-        #hessh(constraints!, gmat, leading_dim_gmat, current_point,
-        #number_of_parameters, v, active_constraints,
-        #number_of_active_constraints, v1, v2, number_of_constraints, error)
+        hessh(constraints!, gmat, leading_dim_gmat, current_point,
+              number_of_parameters, v, active_constraints,
+              number_of_active_constraints, v1, v2, number_of_constraints, error)
         ecomp(p2, a, leading_dim_a, number_of_parameters, d1, pivot, rank_a,
               number_of_active_constraints, gmat, leading_dim_gmat)
     end
@@ -2642,7 +2694,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         j = rank_a + i
         search_direction[j] = d[i]
     end
-    info = Number_wrapper{Int64}(0)
+    info = Number_wrapper(0)
     #dchdc()
     error.value = 0
     if nmr != info.value
@@ -2653,6 +2705,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
     if number_of_active_constraints != rank_a
         p_times_v(p2, rank_a, search_direction,  1)
     end
+    @label compute_search_direction
     if rank_a == 0
         return
     end
@@ -2712,7 +2765,7 @@ function c2tc2(c2::Array{Float64, 2}, leading_dim_c2, rank_c2::Int64,
         end
     end
     v_times_p_transpose(p3, nmt, c2, rank_c2)
-    #jtrj()
+    g_transpose_times_g(c2, rank_c2, v2)
 end
 
 """
@@ -2782,7 +2835,8 @@ function unscramble_array(active_constraints::Array{Int64}, bnd::Int64, l::Int64
         j = bnd + i
         if active_constraints[j] == -1
             active_constraints[j] = 0
-        elseif active_constraints >= 2
+        end
+        if active_constraints[j] >= 2
             active_constraints[j] = 1
         end
     end
@@ -2832,7 +2886,7 @@ end
 """
 Replaces the subroutine LEAEST
 """
-function lagrange_multipliers_estimate(a::Array{Float64, 2},
+function special_lagrange_mult(a::Array{Float64, 2},
                                        number_of_active_constraints::Int64,
                                        current_residuals::Array{Float64},
                                        number_of_residuals::Array{Float64},
@@ -2924,3 +2978,20 @@ function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::Array{Float
         end
     end
 end
+
+"""
+Replaces the subroutine SACTH
+"""
+function sum_sq_active_constraints(current_constraints::Array{Float64},
+                                   active_constraints::Array{Int64},
+                                   number_of_active_constraints::Int64)
+
+    sum = 0.0
+    if number_of_active_constraints != 0
+        for i = 1:number_of_active_constraints
+            sum += current_constraints[active_constraints[i]] ^ 2
+        end
+    end
+    return sum
+end
+

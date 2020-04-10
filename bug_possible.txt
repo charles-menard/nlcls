@@ -1,7 +1,14 @@
-verifier que les dnrm2 commencent a la bonne place
+verifier que les dnrm2 commencent a la bonne place (utiliser les view pour les sous array)
 norm avec stride array
 checker que les int/float wrapper qui sont passe en parametres a d'autres methodes puissent etre lu (.value)
 j'ai peut-etre change des if consecutifs par des elseif ce qui est pas bon si le premier if change la valeur de la condition du deuxieme if
 regarder les appels a psi pour etre sur que le parametre ctrl est un Number_wrapper
 appel a householder_transform : le parametres pivot_vector est une matrice alors comment ca marche si pivot_vector=c2[1,k] (dans orthogonal_projection)
-appel a pv dans sub_search_direction v est sense etre une matrice on lui passe search_direction qui est un vecteur
+appel a pv dans sub_search_direction v est sense etre une matrice on lui passe search_direction qui est un vecteu
+
+CHECK quand il y a un goto vers la fin du do, estce que ca fait un continue ou break? (continue)
+
+- dblmod2nls
+#common wsave, check if all sub that use it are called just in enlsip
+-checker si ca fuck avec les save sur les variables
+-dans lagrange_mult valeur de eta???? au debut semble non initialiser
