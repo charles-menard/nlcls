@@ -12,3 +12,5 @@ CHECK quand il y a un goto vers la fin du do, estce que ca fait un continue ou b
 #common wsave, check if all sub that use it are called just in enlsip
 -checker si ca fuck avec les save sur les variables
 -dans lagrange_mult valeur de eta???? au debut semble non initialiser
+
+EN JULIA DEBUT:INC:FIN

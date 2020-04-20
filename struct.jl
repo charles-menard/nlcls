@@ -40,6 +40,21 @@ mutable struct Restart_steps
     lattry::Int
 end
 
+struct Nlcls_scalars
+    number_of_active_constraints::Int64
+    exit::Int64
+    number_of_iterations::Int64
+    number_of_eval::Int64
+    number_of_jac_eval::Int64
+    number_of_hessian_eval::Int64
+    number_of_linesearch_eval::Int64
+    rank_a::Int64
+    rank_ac::Int64
+    objective_at_termination::Float64
+    convergence_factor::Float64
+end
+
+
 #######
 # The wrapper below is used to simulate passing parameters by reference
 

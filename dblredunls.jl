@@ -1,5 +1,6 @@
 using Printf
 using LinearAlgebra
+include("struct.jl")
 
 """
 Replaces the subroutine NEWPNT
@@ -2290,11 +2291,6 @@ function hessian_residuals(residuals!::Function, hessian::Array{Float64, 2},
     end
     return
 end
-
-
-            
-
-end
 """
 Replaces the subroutine HESSH
 """
@@ -2667,6 +2663,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         end
         if rank_a == number_of_parameters
             @goto compute_search_direction
+	end	
     end
     c2tc2(c[1, tp1], leading_dim_c, nmr, p3, nmt, v2)
     hessf(residuals!, gmat, leading_dim_gmat, current_point,
@@ -2685,7 +2682,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         ecomp(p2, a, leading_dim_a, number_of_parameters, d1, pivot, rank_a,
               number_of_active_constraints, gmat, leading_dim_gmat)
     end
-    w_plus_c(gmat[tp1, 1], c, nmr, number_of_parameters) 
+    w_plus_c(gmat[tp1, 1], c, nmr, number_of_parameters)
     if rank_a != 0
         ycomp()
     end

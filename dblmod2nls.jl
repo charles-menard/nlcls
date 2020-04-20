@@ -1524,7 +1524,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
                                    current_residuals::Array{Float64},
                                    leading_dim_gmat::Int64,
                                    current_point::Array{Float64},
-                                   constraints!:Function, residuals!::Function,
+                                   constraints!::Function, residuals!::Function,
                                    number_of_eval::Number_wrapper{Int64},
                                    number_of_jac_eval::Number_wrapper{Int64},
                                    p2::Array{Int64}, p3::Array{Int64},
@@ -1560,7 +1560,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
     estimated_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                             number_of_active_constraints.value,
                             number_of_parameters, gradient_objective,
-                            minus_active_constraints, (j.value), tol, d1, fmat
+                            minus_active_constraints, (j.value), tol, d1, fmat,
                             leading_dim_fmat, pivot, p1, scale, scaling_matrix,
                             v, rank_a, gres, s, u, v2)
     number_of_householder.value = rank_a.value
@@ -1569,7 +1569,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
         > number_of_parameters)
         sign_ch(deleted_constraints_plus2.value, p1, v,
                 number_of_active_constraints.value, min_l_n, ltp.d1km1,
-                gn_steplength_norm, iteration_number_ scale, scaling_matrix,
+                gn_steplength_norm, iteration_number, scale, scaling_matrix,
                 gres.value, current_constraints, number_of_equality_constraints,
                 number_of_constraints, j.value, noeq, u, v2)
     end
