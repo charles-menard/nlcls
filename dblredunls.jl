@@ -35,7 +35,7 @@ function new_point(current_point::Array{Float64}, number_of_parameters::Int,
                                current_residuals, number_of_residuals,
                                residuals!, jac_residuals,
                                leading_dim_jac_residuals, d, user_stop)
-        if user_stop.valu < -10
+        if user_stop < -10
             return
         end
         number_of_eval.value += number_of_parameters
@@ -45,11 +45,12 @@ function new_point(current_point::Array{Float64}, number_of_parameters::Int,
     end
     ctrla = Number_wrapper(2)
 
-    constraints!(current_point, current_point_dim, current_constraints,
+    constraints!(current_point, number_of_parameters, current_constraints,
                  number_of_constraints, ctrla, jac_constraints,
                  leading_dim_jac_constraints)
 
-    if ctrla.value < 10
+    println("ctrla value ::::", ctrla.value)
+    if ctrla.value < -10
         user_stop.value = ctrla.value
         return
     end
@@ -63,15 +64,15 @@ function new_point(current_point::Array{Float64}, number_of_parameters::Int,
         end
     end
     for i = 1:number_of_constraints
-        b[i] = -constraints[i]
+        b[i] = -current_constraints[i]
     end
 end
 """
 Replaces the subroutine EQUAL
 """
 function equal(b::Array{Float64}, l::Int, a::Array{Float64,2},
-                leading_dim_a::Int, n::Int, active_constraints::Array{Float64},
-                t::Int, p::Int, p4::Array{Int})
+                leading_dim_a::Int, n::Int, active_constraints::Array{Int64},
+                t::Int, p::Int, p4::Array{Int64})
     if l > 0
         for i=1:l
             p4[i] = i
@@ -93,7 +94,8 @@ function equal(b::Array{Float64}, l::Int, a::Array{Float64,2},
         for j=1:n
             a[i,j], a[ip, j] = a[ip, j], a[i, j]
         end
-
+        println("i, ip")
+        println(i, " ", ip)
         b[i], b[ip]= b[ip], b[i]
         for j = 1:t
             if i != p4[j]
@@ -114,8 +116,8 @@ function scale_system(scale::Int, jacobian::Array{Float64,2},
                       leading_dim_jacobian::Int,
                       number_of_active_constraints::Int64,
                       number_of_parameters::Int,
-                       neg_constraints::Array{Float64},
-                       scaling_matrix::Array{Float64})
+                      neg_constraints::Array{Float64},
+                      scaling_matrix::Array{Float64})
 
     if number_of_active_constraints == 0
         return
@@ -265,7 +267,7 @@ function check_last_step(iteration_number::Int64, restart::Bool,
                          constraints!::Function,
                          current_point::Array{Float64}, hessian::Bool,
                          constraint_added::Bool, constraint_deleted::Bool,
-                         scale::Int64, scalingmat::Array{Float64, 2},
+                         scale::Int64, scaling_mat::Array{Float64, 2},
                          gn_direction::Array{Float64},
                          gn_direction_norm::Number_wrapper{Float64},
                          v1::Array{Float64}, relative_termination_tol::Float64,
@@ -275,15 +277,25 @@ function check_last_step(iteration_number::Int64, restart::Bool,
                          dim_a::Number_wrapper{Int64},
                          dim_c2::Number_wrapper{Int64}, v2::Array{Float64},
                          work_area::Array{Float64},
-                         ltp::Last_two_points, restart_steps::Restart_steps)
+                         ltp::Last_two_points, restart_steps::Restart_steps,
+                         ifree::Number_wrapper{Int64}, )
 
-    ind = 0
+    ind = Number_wrapper(0)
     if !restart
-        ind = ltp.rkckm1 + ltp.tm1 - number_of_active_constraints
-        ind -= 1
-        ltp.d1km2 = norm(d[1:ind])
+        ind.value = ltp.rkckm1 + ltp.tm1 - number_of_active_constraints
+        ind.value -= 1
+        @views ltp.d1km2 = norm(d[1:ind.value])
     end
-    #gndchk
+    choose_search_direction(b1_norm.value, d1_norm.value, d_norm.value,
+                            sq_sum_constraints, iteration_number, restart,
+                            ltp.d1km2, constraint_added, number_of_residuals,
+                            number_of_parameters, constraint_deleted,
+                            active_constraints, number_of_equality_constraints,
+                            number_of_active_constraints,
+                            estimated_lagrange_mult, inactive_constraints,
+                            number_of_inactive_constraints, current_constraints,
+                            eps_relative, rank_a, scale, scaling_mat,
+                            d1_plus_b1_norm, ind, ltp, restart_steps, ifree)
     number_of_eval.value = 0
     code.value = ind
     error.value = 0
@@ -293,7 +305,15 @@ function check_last_step(iteration_number::Int64, restart::Bool,
         return
     end
     if ind != 2
-        #subspc()
+        subspace_dimension(restart, sq_sum_residuals, c, leading_dim_c,
+                           number_of_residuals, number_of_parameters,
+                           rank_c2, current_residuals, p3, d3, a,
+                           leading_dim_a, number_of_active_constraints,
+                           rank_a, sq_sum_constraints, p1, d2, p2, b, fmat,
+                           leading_dim_f, pivot, gmat, leading_dim_g,
+                           d, gn_direction, work_area, dim_a, dim_c2, ltp,
+                           restart_steps)
+
         restart_steps.nrrest += 1
         sub_search_direction(deleted_constraints, a, leading_dim_a,
                              number_of_active_constraints, number_of_parameters,
@@ -366,7 +386,7 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
     if number_of_active_constraints > 0
         copyto!(seach_direction, 1, b, 1,
                 number_of_active_constraints)
-        b1_norm.value = norm(search_direction[1:dim_a])
+        @views b1_norm.value = norm(search_direction[1:dim_a])
         z = number_of_residuals + number_of_active_constraints
         search_direction_product(code, gmat, leading_dim_g, rank_a, dim_a,
                                  p1, d2, search_direction,
@@ -386,22 +406,16 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
                         search_direction)
     d_norm = norm(d)
     k = 0
-    d3_i_dummy = Number_wrapper{Float64}
-    c_ik_dummy = Number_wrapper{Float64}
     if rank_c2 > 0
         for i=1:rank_c2
             k = rank_a + i
-            d3_i_dummy.value = d3[i]
-            c_ik_dummy.value = c[i, k]
-            householder_transform(2, i, i+1, number_of_residuals,
-                                  view(c, :, k:number_of_parameters), 1,
-                                  d3_i_dummy, d, 1,
-                                  number_of_residuals, 1, c_ik_dummy)
-            d3[i] = d3_i_dummy.value
-            c[i, k] = c_ik_dummy.value
+            @views householder_transform(2, i, i+1, number_of_residuals,
+                                  c[:, k:number_of_parameters], 1,
+                                  d3[i], d, 1,
+                                  number_of_residuals, 1, c[i, k])
         end
     end
-    d1_norm = d[1:dim_c2]
+    @views d1_norm = d[1:dim_c2]
     k = rank_a + 1
     nmt = number_of_parameters - rank_a
     orthogonal_projection(c, leading_dim_c, number_of_residuals, dim_a,
@@ -421,7 +435,7 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
         end
     end
     #??????
-    p_times_v(p2, nmt, view(search_direction, rank_a+1:number_of_parameters), 1)
+    @views p_times_v(p2, nmt, search_direction[rank_a+1:number_of_parameters], 1)
     if code != 1
         p_times_v(p2, rank_a, search_direction, 1)
     end
@@ -453,18 +467,17 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
     if number_of_householder == 0
         return
     end
-    d1_k_dummy = Number_wrapper{Float64}
-    pivot_k_dummy = Number_wrapper{Float64}
+    d1_k_dummy  = Number_wrapper{Float64}(0.)
+    pivot_k_dummy  = Number_wrapper{Float64}(0.)
     for i=1:number_of_householder
         k = number_of_householder - i + 1
         d1_k_dummy.value = d1[k]
         pivot_k_dummy.value = pivot[k]
-        #a[k:end, :]???
-        householder_transform(2, k, k+1, number_of_parameters,
-                              view(a, k:leading_dim_a, :),
-                              leading_dim_a, d1_k_dummy, search_direction, 1,
+        @views householder_transform(2, k, k+1, number_of_parameters,
+                                     a[k:leading_dim_a, 1:end], leading_dim_a,
+                                     d1[k], search_direction, 1,
                               leading_dim_a, 1,
-                              pivot_k_dummy)
+                              pivot[k])
         d1[k], pivot[k] = d1_k_dummy.value, pivot_k_dummy.value
     end
 end
@@ -585,7 +598,8 @@ function move_violated_constraints(current_constraints::Array{Float64},
         j = min_l_n + k - number_of_equality
         if active_constraints[j] == -1
             active_constraints[j] = iteration_number
-        elseif active_constraints[j] == 0
+        end
+        if active_constraints[j] == 0
             active_constraints[j] = 1
         end
         constraint_added.value = true
@@ -596,15 +610,17 @@ function move_violated_constraints(current_constraints::Array{Float64},
 end
     """
 Replaces the subroutine SCALV
+check if the factor is inf or zero to avoid arith error
 
     vector ./= factor
 """
-function scale_vector(v::Array{Float64}, factor::Float64, n::Int64)
+function scale_vector(v::Array{Float64}, factor::Float64, start::Int64,
+                      length::Int64)
     if factor == 0.0 || isinf(factor)
         return
     end
-    for i = 1:n
-        v[i] /= factor
+    for i in 1:length
+        v[start + i - 1] /= factor
     end
 end
 
@@ -790,14 +806,14 @@ function search_direction_product(code::Int64, gmat::Array{Float64, 2},
     if code != 1
         for i = 1:rank_a
             k = rank_a + 1 - i
-            householder_transform(2, k, k+1, number_of_active_cosntraints,
-                                  view(gmat, :, k:number_of_parameters), 1,
-                                  d2_k_dummy, product,
-                                  1, number_of_active_constraints,
-                                  view(gmat, :, k:number_of_parameters))
+            @views householder_transform(2, k, k+1, number_of_active_constraints,
+                                  gmat[:, k:number_of_parameters], 1,
+                                  d2[k], product,
+                                  1, number_of_active_constraints, 1,
+                                  gmat[k, k])
         end
     end
-    if length(b) < number_of_householder
+    if number_of_active_constraints < number_of_householder
         permute(number_of_active_constraints, p1, product, work_area)
         copyto!(product, 1, work_area, 1, number_of_active_constraints)
     else
@@ -831,25 +847,21 @@ function l_to_upper_triangular(a::Array{Float64, 2}, leading_dim_a::Int64,
             end
         end
     end
-    cmax = Number_wrapper{Int64}
-    collng = Number_wrapper{Float64}
+    cmax = Number_wrapper{Int64}(0)
+    collng  = Number_wrapper{Float64}(0.)
     for i=1:rank_a
         max_partial_row_norm(number_of_parameters, rank_a, gmat, leading_dim_g,
                              i, i, cmax, collng)
         p2[i] = cmax
         permute_columns(gmat, leading_dim_g, number_of_parameters, i, cmax.value)
-        d2_i_dummy = Number_wrapper(d2[i])
-        gmat_ii_dummy = Number_wrapper(gmat[i, i])
-        householder_transform(1, i, i+1, number_of_parameters,
-                              view(gmat, :, i:number_of_parameters),
-                              1, d2_i_dummy, gmat[:, i+1], 1,
-                              leading_dim_g, rank_a-i, gmat_ii_dummy)
-        householder_transform(2, i, i+1, number_of_parameters,
-                              view(gmat, :, i:number_of_parameters),
-                              1, d2_i_dummy, b, 1, number_of_parameters, 1,
-                              gmat_ii_dummy)
-        d2[i] = d2_i_dummy.value
-        gmat[i, i] = gmat_ii_dummy.value
+        @views householder_transform(1, i, i+1, number_of_parameters,
+                              gmat[:, i:number_of_parameters],
+                              1, d2[i], gmat[:, i+1:end], 1,
+                              leading_dim_g, rank_a-i, gmat[i, i])
+        @views householder_transform(2, i, i+1, number_of_parameters,
+                              gmat[ :, i:number_of_parameters],
+                              1, d2[i], b, 1, number_of_parameters, 1,
+                              gmat[i, i])
     end
     return
 
@@ -872,8 +884,8 @@ function a_to_lower_triangular(number_of_rows_a::Int64, length_g::Int64,
     ldiag = min(number_of_rows_a, length_g)
     p1[1:ldiag] = [1:ldiag]
     krank = 0
-    imax = Number_wrapper{Int64}
-    rmax = Number_wrapper{Float64}
+    imax = Number_wrapper{Int64}(0)
+    rmax  = Number_wrapper{Float64}(0.)
     for i = 1:ldiag
         krank = i
         max_partial_row_norm(number_of_rows_a, length_g, a, leading_dim_a,
@@ -883,15 +895,13 @@ function a_to_lower_triangular(number_of_rows_a::Int64, length_g::Int64,
         end
         p1[i] = imax.value
         permute_row(a, leading_dim_a, length_g, i, imax.value)
-        d1_i_dummy = Number_wrapper(d1[i])
-        a_ii_dummy = Number_wrapper(a[i, i])
-        householder_transform(1, i, i+1, length_g, a[i:end, :], leading_dim_a,
-                             d1_i_dummy, a[i+1:end, :], leading_dim_a, 1, t-i,
-                              a_ii_dummy)
-        householder_transform(2, i, i+1, length_g_, a[i:end, :], leading_dim_a,
-                              d1_i_dummy, g, 1, length_g, 1, a_ii_dummy)
-        d1[i] = d1_i_dummy.value
-        a[i, i] = a_ii_dummy.value
+        @views householder_transform(1, i, i+1, length_g, a[i:end, :],
+                                     leading_dim_a,
+                                     d1[i], a[i+1:end, :], leading_dim_a, 1,
+                                     t-i, a[i, i])
+        @views householder_transform(2, i, i+1, length_g_, a[i:end, :],
+                                     leading_dim_a,
+                                     d1[i], g, 1, length_g, 1, a[i, i])
         krank = i + 1
     end
     pseudo_rank_a = krank - 1
@@ -913,21 +923,19 @@ function c2_to_upper_trianguar(number_of_rows_c2::Int64, number_of_col_c2::Int64
     end
     p3 = [1:number_of_col_c2]
     ldiag = pseudo_rank_c2.value
-    kmax = Number_wrapper{Int64}
-    rmax = Number_wrapper{Float64}
+    kmax = Number_wrapper{Int64}(0)
+    rmax  = Number_wrapper{Float64}(0.)
     for k = 1:ldiag
         max_partial_row_norm(number_of_rows_c2, number_of_col_c2, c2,
                              leading_dim_c2, k, k, kmax, rmax)
         permute_columns(c2, leading_dim_c2, number_of_rows_c2, k, kmax.value)
-        d3_k_dummy = Number_wrapper(d3[k])
-        c2_kk_dummy = Number_wrapper(c2[k, k])
-        householder_transform(1, k, k+1, number_of_rows_c2, c2[:, k:end],
-                              1, d3_k_dummy, c2[:, k+1:end], 1, leading_dim_c,
-                              number_of_col_c2-k, c2_kk_dummy)
-        d3[k] = d3_k_dummy.value
-        c2[k, k] = c2_kk_dummy.value
-    end
-    krank = 0
+        #linear indexing on the parameter c of householder_transform
+        #
+        @views householder_transform(1, k, k+1, number_of_rows_c2, c2[:, k:end],
+                                1, d3[k], c2[:, k+1:end], 1, leading_dim_c,
+                                number_of_col_c2-k, c2[k, k])
+      end
+      krank = 0
     u_11 = abs(c2[1, 1])
     for k = 1:ldiag
         if abs(c2[k, k]) <= tol*u_11
@@ -955,19 +963,14 @@ function orthogonal_projection(c1::Array{Float64, 2}, leading_dim_c::Int64,
     for i = 1:m
         fprim[i] = (i <= dim_c2) ? dv[i] : 0.0
     end
-    up_wrapper = Number_wrapper{Float64}
-    pivot_wrapper = Number_wrapper{Float64}
     if rank_c2 > 0
         k = 0
         for i = 1:rank_c2
             k = rank_c2 + 1 - i
-            up_wrapper.value = d2[k]
-            pivot_wrapper = c2[k, k]
             #??? parametres pivot_vector est une matrice
-            householder_transform(2, k, k+1, m, c2[:, k], 1, up_wrapper, fprim, 1,
-                                  m, 1, pivot_wrapper)
-            d2[k] = up_wrapper.value
-            c2[k, k] = pivot_wrapper.value
+            @views householder_transform(2, k, k+1, m, c2[:, k:end], 1,
+                                         d2[k, k], fprim, 1,
+                                  m, 1, c2[k, k])
         end
     end
     if dim_a > 0
@@ -992,7 +995,7 @@ function max_partial_row_norm(m::Int64, n::Int64, a::Array{Float64, 2},
 
     max_row_norm.value = -1.0
     for i = starting_row:m
-        row_norm = norm(a[i, starting_col:n])
+        @views row_norm = norm(a[i, starting_col:n])
         if row_norm > max_row_norm.value
             max_row_norm.value = row_norm
             max_row_index.value = i
@@ -1082,8 +1085,20 @@ function p_times_v(p::Array{Int64}, m::Int64, v::Array{Float64,2},
         permute_rows(a=v, n=n, row1=k, row2=p[k])
     end
 end
+
+function p_times_v(p::Array{Int64}, m::Int64, v::Array{Float64})
+    if m <= 0
+        return
+    end
+    for i = 1:m
+        k = m + 1 - i
+        v[k], v[p[k]] = v[p[k]], v[k]
+    end
+end
+
 """
 Replaces subroutine VP
+v is a matrix M*N
 """
 function v_times_p(v::Array{Float64, 2},
                    m::Int64, n::Int64, p::Array{Int64})
@@ -1094,6 +1109,15 @@ function v_times_p(v::Array{Float64, 2},
         permute_columns(a=v, m=m, col1=i, col2=p[i])
     end
 end
+function v_times_p(v::Array{Float64},
+                   n::Int64, p::Array{Int64})
+    if n <= 0
+        return
+    end
+    for i = 1:n
+        v[i], v[p[i]] = v[p[i]], v[i]
+    end
+end
 
 """
 Replaces the routine H12PER
@@ -1101,14 +1125,18 @@ Modifies the parameter c
 """
 function householder_transform(mode::Int64, pivot_index::Int64, l1::Int64,
                                 m::Int64,
-    pivot_vector::Array{Float64, 2}, pivot_vect_number_rows::Int64,
-    up::Number_wrapper{Float64}, c::Array{Float64}, inc_elements_c::Int64,
-    inc_vectors_c::Int64, number_of_vectors_c::Int64, pivot::Number_wrapper{Float64})
+                               pivot_vector::AbstractArray{Float64, 2},
+                               pivot_vect_number_rows::Int64,
+                               up::AbstractArray{Float64},
+                               c::AbstractArray{Float64},
+                               inc_elements_c::Int64,
+                               inc_vectors_c::Int64, number_of_vectors_c::Int64,
+                               pivot::AbstractArray{Float64})
 
     if 0 <= pivot_index || pivot_index >= l1 || l1 < m
         return
     end
-    cl = abs(pivot.value)
+    cl = abs(pivot[1])
     if mode != 2
         for j = l1:m
             cl = max(abs(pivot_vector[1, j]), cl)
@@ -1254,19 +1282,13 @@ function c_q1_h_p2_product(time::Int64, c::Array{Float64, 2}, leading_dim_c::Int
     if na == 0
         return
     end
-    pivot_wrapper = Number_wrapper{Float64}
-    up_wrapper = Number_wrapper{Float64}
     for i = 1:na
-        pivot_wrapper.value = pivot[i]
-        up_wrapper.value = d1[i]
-        householder_transform(mode=2, pivot_index=i, l1=i+1, m=n,
-                              pivot_vector=a[i, 1],
+        @views householder_transform(mode=2, pivot_index=i, l1=i+1, m=n,
+                              a[i:end, :],
                               pivot_vect_number_rows=leading_dim_a,
-                              up=up_wrapper, c=c, inc_elements_c=leading_dim_c,
+                              up=d1[i], c=c, inc_elements_c=leading_dim_c,
                               inc_vectors_c=1, number_of_vectors_c=m,
-                              pivot=pivot_wrapper)
-        pivot[i] = pivot_wrapper.value
-        d1[i] = up_wrapper.value
+                              pivot=pivot[i])
     end
     if time > 2 || !(time == 3 && t == 0)
         c_times_h(m=m, n=n, c=c, leading_dim_c=leading_dim_c, h=h,
@@ -1308,7 +1330,8 @@ function sign_ch(time::Int64, p1::Array{Int64}, v::Array{Float64}, t::Int64,
         end
         if -sqrt_rel_prec < v[i] * current_el
             continue
-        elseif v[i] * current_el >= e
+        end
+        if v[i] * current_el >= e
             continue
         end
         e = v[i] * current_el
@@ -1980,9 +2003,11 @@ function minrm1(v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
     sqnv2.value = v2_norm ^ 2
     if v0_norm != 0.0
         v0 ./= v0_norm
-    elseif v1_norm != 0.0
+    end
+    if v1_norm != 0.0
         v1 ./= v1_norm
-    elseif v2_norm != 0.0
+    end
+    if v2_norm != 0.0
         v2 ./= v2_norm
     end
     sc1, sc2, sc3 = 0.0, 0.0, 0.0
@@ -1996,9 +2021,11 @@ function minrm1(v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
     scv1v2.value = sc2 * v1_norm * v2_norm
     if v0_norm != 0.0
         v0 .*= v0_norm
-    elseif v1_norm != 0.0
+    end
+    if v1_norm != 0.0
         v1 .*= v1_norm
-    elseif v2_norm != 0.0
+    end
+    if v2_norm != 0.0
         v2 .*= v2_norm
     end
 end
@@ -2104,7 +2131,7 @@ function twor(p::Float64, q::Float64, delta::Float64, a1div3::Float64,
     
     eps = 1.0e-8
     sqd = sqrt(delta)
-    if abs(q) <= 2.0 * eps * sqd
+    if abs(q) <= 2.0 * epsilon * sqd
         fi = pi / 2.0
     else
         tanfi = abs(2.0 * sqd / q)
@@ -2183,9 +2210,9 @@ function psi(current_point::Array{Float64}, p::Array{Float64},
     hctrl = Number_wrapper(ctrl)
     if ctrl.value != 1
         if -1 == fctrl.value && -1 == hctrl.value
-            psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
-                   + constraints_merit(active_constraints, t,
-            next_constraints, w, l))
+            @views psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
+                          + constraints_merit(active_constraints, t,
+                                              next_constraints, w, l))
         end
         if fctrl.value < -10 || hctrl.value < -10
             ctrl.value = min(fctrl.value, hctrl.value)
@@ -2193,7 +2220,7 @@ function psi(current_point::Array{Float64}, p::Array{Float64},
         return psi
     end
     if fctrl.value == 1 && hctrl.value == 1
-        psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
+        @views psi = (0.5 * norm(next_residuals[1:number_of_residuals]) ^ 2
                + constraints_merit(active_constraints, t, next_constraints,
         w, l))
     else
@@ -2414,7 +2441,8 @@ function check_derivative(psi_derivative_at_zero::Float64, psi_at_zero::Float64,
                 penalty_weights, ctrl)
     if ctrl.value < -10
         number_of_eval.value = ctrl.value
-    elseif number_of_eval.value < 0
+    end
+    if number_of_eval.value < 0
         return
     end
     number_of_eval.value += 1
@@ -2495,6 +2523,7 @@ end
 
         """
 Replaces the subroutine JACDIF
+for residuals and constraints despite the name of the parameters
 """
 function jacobian_forward_diff(current_point::Array{Float64},
                                current_point_dim::Int64,
@@ -2513,7 +2542,7 @@ function jacobian_forward_diff(current_point::Array{Float64},
         current_point[j] = xtemp + delta_j
         ctrl.value = -1
         residuals!(current_point, current_point_dim, w1, number_of_residuals,
-                   ctrl, jcobian, leading_dim_jacobian)
+                   ctrl, jacobian, leading_dim_jacobian)
         if ctrl.value <= -10
             user_stop.value = ctrl.value
             return
@@ -2663,9 +2692,9 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         end
         if rank_a == number_of_parameters
             @goto compute_search_direction
-	end	
+	      end	
     end
-    c2tc2(c[1, tp1], leading_dim_c, nmr, p3, nmt, v2)
+    @views c2tc2(c[1, tp1], nmr, p3, nmt, v2)
     hessf(residuals!, gmat, leading_dim_gmat, current_point,
           number_of_parameters, current_residuals, v1, v2, number_of_residuals,
           error)
@@ -2682,7 +2711,7 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         ecomp(p2, a, leading_dim_a, number_of_parameters, d1, pivot, rank_a,
               number_of_active_constraints, gmat, leading_dim_gmat)
     end
-    w_plus_c(gmat[tp1, 1], c, nmr, number_of_parameters)
+    @views w_plus_c(gmat[tp1:end, :], c, nmr, number_of_parameters)
     if rank_a != 0
         ycomp()
     end
@@ -2691,16 +2720,21 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
         j = rank_a + i
         search_direction[j] = d[i]
     end
-    info = Number_wrapper(0)
-    #dchdc()
-    error.value = 0
-    if nmr != info.value
+    info = Number_wrapper{Int64}(0)
+    #try to do a cholesky decomposition and solve
+    # gmat[tp1:n, tp1:n] * x = dx[tp1:n]
+    try
+        @views LAPACK.posv!('L',
+                            gmat[tp1:number_of_parameters, tp1:number_of_parameters],
+                            search_direction[tp1:number_of_parameters])
+    catch PosDefException
         error.value = -3
         return
     end
-    #dposl()
+
+    error.value = 0
     if number_of_active_constraints != rank_a
-        p_times_v(p2, rank_a, search_direction,  1)
+        p_times_v(p2, rank_a, search_direction, 1)
     end
     @label compute_search_direction
     if rank_a == 0
@@ -2708,7 +2742,10 @@ function newton_search_direction(residuals!::Function, constraints!::Function,
     end
     for i = 1:rank_a
         j = rank_a - i + 1
-        #householder_transform()
+        householder_transform(2, j, j+1, number_of_parameters,
+                              view(a, j:leading_dim_a, 1:number_of_parameters),
+                              leading_dim_a, d1[j], search_direction, 1,
+                              leading_dim_a, pivot[j])
     end
 end
 
@@ -2720,16 +2757,10 @@ function p3utq3(p3::Array{Int64}, nmt::Int64, c2::Array{Float64 ,2},
                 c::Array{Float64, 2}, number_of_residuals::Int64, rank_a::Int64,
                 v2::Array{Float64})
     if rank_c2 > 0
-        d3_i_dummy = Number_wrapper{Float64}
-        c2_ii_dummy = Number_wrapper{Float64}
         for i = 1:rank_c2
-            d3_i_dummy.value = d3[i]
-            c2_ii_dummy.value = c2[i, i]
-            householder_transform(2, i, i+1, number_of_residuals,
-                                  view(c2, :, i:rank_c2), 1, d3_i_dummy,
-                                  c, 1, leading_dim_c, rank_a, c2_ii_dummy)
-            d3[i] = d3_i_dummy.value
-            c2[i, i] = c2_ii_dummy.value
+            @views householder_transform(2, i, i+1, number_of_residuals,
+                                  c2[:, i:rank_c2], 1, d3[i],
+                                  c, 1, leading_dim_c, rank_a, c2[i, i])
         end
         sum = 0.0
         for j = 1:rank_a
@@ -2750,7 +2781,7 @@ end
 """
 Replaces the subroutine C2TC2
 """
-function c2tc2(c2::Array{Float64, 2}, leading_dim_c2, rank_c2::Int64,
+function c2tc2(c2::AbstractArray{Float64, 2}, rank_c2::Int64,
                p3::Array{Int64}, nmt::Int64, v2::Array{Float64})
     k = 0
     if rank_c2 > 1
@@ -2768,14 +2799,17 @@ end
 """
 Replaces the subroutine ECOMP
 """
-function ecomp(p2::Array{Int64}, a::Array{Float64 , 2}, leading_dim_a::Int64, n::Int64,
+function ecomp(p2::Array{Int64}, a::Array{Float64 , 2}, leading_dim_a::Int64,
+               n::Int64,
                d1::Array{Float64}, pivot::Array{Float64}, rank_a::Int64, t::Int64,
                gmat::Array{Float64}, leading_dim_gmat)
     for i = 1:rank_a
-        #householder_transform()
+        @views householder_transform(2, i, i+1, n, a[i:end, :], leading_dim_a,
+                                     d1[i], gmat, leading_dim_g, 1, n, pivot[i])
     end
     for i = 1:rank_a
-        #householder_transform()
+        @views householder_transform(2, i, i+1, n, a[i:end, :], leading_dim_a,
+                                     d1[i], gmat, leading_dim_g, n, pivot[i])
     end
     if t == rank_a
         return
@@ -2787,7 +2821,8 @@ end
 Replaces the subroutine WCOMP
 w and c are nmt*n (but with different leading dimension)
 """
-function w_plus_c(w::Array{Float64, 2}, c::Array{Float64, 2}, nmt::Int64, n::Int64)
+function w_plus_c(w::AbstractArray{Float64, 2}, c::AbstractArray{Float64, 2},
+                  nmt::Int64, n::Int64)
     for i = 1:nmt
         for j = 1:n
             w[i,j] += c[i, j]
@@ -2929,11 +2964,9 @@ function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::Array{Float
         return
     end
     copyto!(working_area, 1, working_area, 1, number_of_constraints)
-    y_norm = norm(y[1:number_of_constants])
+    @views y_norm = norm(y[1:number_of_constraints])
     y_norm_sq = y_norm ^ 2
-    if y_norm != 0.0
-        y[1:n] = 1.0: ./(y_norm * y[1:n])
-    end
+    scale_vector(y, y_norm, 1, number_of_constraints)
     tau_new = tau
     sum = 0.0
     nrunch = number_of_constants

@@ -1,4 +1,6 @@
 #This file contains the struct used to mimic the effect the different
+
+import Base.==
 """
 Replaces the common block PREC
 """
@@ -54,7 +56,6 @@ struct Nlcls_scalars
     convergence_factor::Float64
 end
 
-
 #######
 # The wrapper below is used to simulate passing parameters by reference
 
@@ -62,4 +63,11 @@ end
 mutable struct Number_wrapper{T<:Number}
     value::T
 end
-
+Base.isless(a::Number_wrapper{T}, b::T) where T = a.value < b
+Base.isless(a::T, b::Number_wrapper{T}) where T = a < b.value
+function Base.isless(a::Number_wrapper{T}, b::Number_wrapper{T}) where T
+    a.value < b.value
+end
+==(a::Number_wrapper{T}, b::T) where T = a.value == b
+==(a::T, b::Number_wrapper{T}) where T = a == b.value
+==(a::Number_wrapper{T}, b::Number_wrapper{T}) where T = a.value == b.value

@@ -4262,7 +4262,7 @@ C
       IF(RANKC2.LE.0) GOTO 60
       DO 10 I=1,RANKC2
            CALL H12PER(2,I,I+1,M,C2(1,I),1,D3(I),C,1,MDC,RANKA,C2(I,I))
-   10 CONTINUE
+   10 CONTINU
 C                    T
 C     COMPUTE  C@D= (U @D0)*C
 C
