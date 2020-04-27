@@ -4,7 +4,7 @@ include("./dblredunls.jl")
 Replaces the subroutine GIVEN1
 """
 function givens_rotation(z1::Float64, z2::Float64, c::Number_wrapper{Float64},
-                         s::Number_wrapper{Float64}, sig::Array{Float64})
+                         s::Number_wrapper{Float64}, sig::AbstractArray{Float64})
     if z2 != 0.0
         gamma = sqrt(z1 ^ 2 + z ^ 2)
         c.value = z1 / gamma
@@ -19,14 +19,15 @@ end
 """
 Replaces the subroutine NLSNIP
 """
-function nonlinear_least_square(current_point::Array{Float64},
+function nonlinear_least_square(current_point::AbstractArray{Float64},
                                 number_of_parameters::Int64,
                                 leading_dim_c::Int64, leading_dim_a::Int64,
                                 leading_dim_g::Int64, leading_dim_f::Int64,
                                 number_of_residuals::Int64,
-                                number_of_equality_constraints::Int64,
+                                (number_of_equality_constraints::
+                                 Number_wrapper{Int64}),
                                 number_of_constraints::Int64, tol::Float64,
-                                penalty_weights::Array{Float64},
+                                penalty_weights::AbstractArray{Float64},
                                 eps_relative::Float64, eps_absolute::Float64,
                                 eps_point::Float64, eps_constraints::Float64,
                                 verbose::Int64, nout::Int64,
@@ -42,31 +43,66 @@ function nonlinear_least_square(current_point::Array{Float64},
                                 number_of_linesearch_eval::Number_wrapper{Int64},
                                 rank_a::Number_wrapper{Int64},
                                 rank::Number_wrapper{Int64},
-                                current_residuals::Array{Float64},
-                                current_constraints::Array{Float64},
-                                active_constraints::Array{Int64},
+                                current_residuals::AbstractArray{Float64},
+                                current_constraints::AbstractArray{Float64},
+                                active_constraints::AbstractArray{Int64},
                                 convergence_factor::Number_wrapper{Float64},
-                                p1::Array{Int64}, p2::Array{Int64},
-                                p3::Array{Int64},
-                                inactive_constraints::Array{Int64},
-                                p4::Array{Int64}, b::Array{Float64},
-                                d1::Array{Float64}, d2::Array{Float64},
-                                d3::Array{Float64},
-                                scaling_matrix::Array{Float64},
-                                g::Array{Float64}, pivot::Array{Float64},
-                                search_direction::Array{Float64},
-                                v::Array{Float64}, u::Array{Float64},
-                                s::Array{Float64},
-                                old_penalty_weights::Array{Float64},
-                                a::Array{Float64, 2}, d::Array{Float64},
-                                v1::Array{Float64}, v2::Array{Float64},
-                                c::Array{Float64, 2},
-                                fmat::Array{Float64, 2},
-                                gmat::Array{Float64, 2},
+                                p1::AbstractArray{Int64},
+                                p2::AbstractArray{Int64},
+                                p3::AbstractArray{Int64},
+                                inactive_constraints::AbstractArray{Int64},
+                                p4::AbstractArray{Int64},
+                                b::AbstractArray{Float64},
+                                d1::AbstractArray{Float64},
+                                d2::AbstractArray{Float64},
+                                d3::AbstractArray{Float64},
+                                scaling_matrix::AbstractArray{Float64},
+                                g::AbstractArray{Float64},
+                                pivot::AbstractArray{Float64},
+                                search_direction::AbstractArray{Float64},
+                                v::AbstractArray{Float64},
+                                u::AbstractArray{Float64},
+                                s::AbstractArray{Float64},
+                                old_penalty_weights::AbstractArray{Float64},
+                                a::AbstractArray{Float64, 2},
+                                d::AbstractArray{Float64},
+                                v1::AbstractArray{Float64},
+                                v2::AbstractArray{Float64},
+                                c::AbstractArray{Float64, 2},
+                                fmat::AbstractArray{Float64, 2},
+                                gmat::AbstractArray{Float64, 2},
                                 ltp::Last_two_points,
                                 restart_steps::Restart_steps,
                                 ifree::Number_wrapper{Int64})
-
+    d1_norm = Number_wrapper{Float64}(0.)
+    d_norm::Number_wrapper{Float64} = Number_wrapper(0.)
+    b1_norm::Number_wrapper{Float64} = Number_wrapper(0.)
+    beta_k = Number_wrapper(0.)
+    rank_c2 = Number_wrapper{Int64}(0)
+    gn_direction_norm = Number_wrapper(0.)
+    gres = Number_wrapper{Float64}(0.)
+    deleted_constraints = Number_wrapper{Bool}(false)
+    added_constraints = Number_wrapper(false)
+    time = Number_wrapper{Int64}(0)
+    sigmin = Number_wrapper{Float64}(0.)
+    absvmx = Number_wrapper{Float64}(0.)
+    wh_norm = Number_wrapper(0.0)
+    gradient_norm = 0.0
+    code = Number_wrapper{Int64}(0)
+    eval = Number_wrapper{Int64}(0)
+    dim_a = Number_wrapper{Int64}(0)
+    dim_c2 = Number_wrapper(0)
+    steplength = Number_wrapper{Float64}(0.)
+    lower_bound_steplength = Number_wrapper{Float64}(0)
+    upper_bound_steplength = Number_wrapper{Float64}(0)
+    current_psi = Number_wrapper(0.0)
+    index_upper_bound = Number_wrapper{Int64}(0)
+    number_of_active_constraints = Number_wrapper{Int64}(0)
+    lmt = Number_wrapper{Int64}(0)
+    number_of_householder = Number_wrapper{Int64}(0)
+    #common wsave, check if all sub that use it are called just in enlsip
+    wsave = Array{Float64, 2}(undef, 100, 4)
+ 
     exit.value = 0
     if ((number_of_residuals + number_of_constraints) < number_of_parameters
         || number_of_parameters <= 0
@@ -106,7 +142,7 @@ function nonlinear_least_square(current_point::Array{Float64},
 
     epsilon = eps(Float64)
     if number_of_parameters > 100
-        p_norm.value = 0
+        p_norm = 0
     end
     iteration_number.value = 0
     ifree.value = 0
@@ -128,14 +164,8 @@ function nonlinear_least_square(current_point::Array{Float64},
     residuals!(current_point, number_of_parameters, current_residuals,
                number_of_residuals, ctrl_residuals, c, leading_dim_c)
     
-    println("At first point residuals are ")
-    println(current_residuals)
-    println("--------------------")
     constraints!(current_point, number_of_parameters, current_constraints,
                  number_of_constraints, ctrl_constraints, a, leading_dim_a)
-    println("At first point constraints are ")
-    println(current_constraints)
-    println("------------------------------")
     number_of_eval.value += 1
     if ctrl_residuals.value == -1 || ctrl_constraints == -1
         exit.value = -7
@@ -143,11 +173,7 @@ function nonlinear_least_square(current_point::Array{Float64},
     if exit.value < 0
         return
     end
-    number_of_active_constraints = Number_wrapper{Int64}(0)
-    lmt = Number_wrapper{Int64}(0)
-    #common wsave, check if all sub that use it are called just in enlsip
-    wsave = Array{Float64, 2}(undef, 100, 4)
-    init_working_set(number_of_equality_constraints, number_of_constraints,
+   init_working_set(number_of_equality_constraints.value, number_of_constraints,
                      current_constraints, active_constraints,
                      number_of_active_constraints, min_l_n, p_norm,
                      inactive_constraints, lmt, penalty_weights,
@@ -163,14 +189,13 @@ function nonlinear_least_square(current_point::Array{Float64},
     restart_steps.bestpg = 0.0
     ltp.rkakm1 = number_of_active_constraints.value
     ltp.tkm1 = number_of_active_constraints.value
-    added_constraint = Number_wrapper(false)
     fsum = Number_wrapper(
         BLAS.nrm2(number_of_residuals, current_residuals, 1) ^ 2)
     ltp.fsqkm1 = fsum.value
     ltp.hsqkm1 = sum_sq_active_constraints(
         current_constraints, active_constraints,
         number_of_active_constraints.value)
-    println("BEGIN THE LOOP--------------------------------")
+
     #10
     @label iteration_loop
     if error.value == -5 || error.value == -3
@@ -179,14 +204,10 @@ function nonlinear_least_square(current_point::Array{Float64},
     if restart.value
         @goto check_termination_criteria
     end
-    println("current cons before new point")
-    println(current_constraints)
     new_point(current_point, number_of_parameters, current_constraints,
               number_of_constraints, current_residuals, number_of_residuals,
               constraints!, residuals!, leading_dim_a, leading_dim_c,
               number_of_eval, a, c, b, d, error)
-    println("b after new_point")
-    println(b)
     if error.value < -10
         @goto user_stop
     end
@@ -209,7 +230,7 @@ function nonlinear_least_square(current_point::Array{Float64},
 
     equal(b, number_of_constraints, a, leading_dim_a, number_of_parameters,
           active_constraints, number_of_active_constraints.value,
-          number_of_equality_constraints, p4)
+          number_of_equality_constraints.value, p4)
     gradient(c, number_of_residuals, number_of_parameters,
              current_residuals, g)
     gradient_norm = norm(g)
@@ -218,17 +239,12 @@ function nonlinear_least_square(current_point::Array{Float64},
     current_point_norm = norm(current_point)
     current_objective.value = 0.5 * fsum.value
 
-    d1_norm = Number_wrapper{Float64}(0.)
-    rank_c2 = Number_wrapper{Int64}(0)
-    gres = Number_wrapper{Float64}(0.)
-    deleted_constraints = Number_wrapper{Bool}(false)
-    time = Number_wrapper{Int64}(0)
     update_active_constraints(a, leading_dim_a, number_of_active_constraints,
-                              number_of_equality_constraints,
+                              number_of_equality_constraints.value,
                               number_of_parameters, g, b, tau, leading_dim_f,
                               scale, iteration_number.value, scaling_matrix,
                               active_constraints, min_l_n, inactive_constraints,
-                              lmt, current_constraints, search_direction_norm,
+                              lmt, current_constraints, gn_direction_norm,
                               p4, c, leading_dim_c, number_of_residuals,
                               current_residuals, leading_dim_g, current_point,
                               constraints!, residuals!, number_of_eval,
@@ -239,24 +255,23 @@ function nonlinear_least_square(current_point::Array{Float64},
                               pivot, v2, s, u, ltp, restart_steps)
 
     hsum = Number_wrapper(
-        sq_sum_active_constraints(current_constraints,
+        sum_sq_active_constraints(current_constraints,
                                   active_constraints,
                                   number_of_active_constraints.value))
-    gnd_norm = d_norm.value
-    search_direction_norm = norm(search_direction)
-    alfnoi = sqrt(epsilon) / (search_direction_norm + epsilon)
-
-    sigmin = Number_wrapper{Float64}(0.)
-    absvmx = Number_wrapper{Float64}(0.)
-    min_max_lagrange_mult(number_of_equality_constraints,
-                          number_of_active_constraints,
+    gn_direction_norm.value = d_norm.value
+    search_direction_norm = Number_wrapper(
+        BLAS.nrm2(number_of_parameters, search_direction, 1)
+    )
+    alfnoi = sqrt(epsilon) / (search_direction_norm.value + epsilon)
+    min_max_lagrange_mult(number_of_equality_constraints.value,
+                          number_of_active_constraints.value,
                           v, scale, scaling_matrix, sigmin, absvmx)
 
-    if ltp.kodm1 == 2
+    if ltp.kodkm1 == 2
         @goto check_termination_criteria
     end
     success = ltp.d1km1 - d1_norm.value
-    if ltp.rkcm1 == rank_c2.value
+    if ltp.rkckm1 == rank_c2.value
         @goto check_termination_criteria
     end
     if success < 0.0
@@ -267,37 +282,35 @@ function nonlinear_least_square(current_point::Array{Float64},
 
     @label check_termination_criteria
     #wh_norm not initialised but check for value in termination_criteria??
-    wh_norm = 0.0
-    termination_criteria(rank_a.value, rank_c2.value, error,
-                         number_of_equality_constraints,
-                         number_of_active_constraints.value, number_of_constraints,
+    termination_criteria(rank_a.value, rank_c2.value, error.value,
+                         number_of_equality_constraints.value,
+                         number_of_active_constraints.value, number_of_parameters,
                          restart.value, deleted_constraints.value,
                          maximum_iteration, iteration_number.value,
                          fsum.value, d1_norm.value, hsum.value, gres.value,
-                         curent_point_norm, gradient_norm, alfnoi,
-                         current_constraints, inactive_constraints, lmt,
+                         current_point_norm, gradient_norm, alfnoi,
+                         current_constraints, inactive_constraints, lmt.value,
                          x_diff.value, eps_absolute, eps_relative, eps_point,
-                         eps_constraints, sigmin, absvmx, old_penalty_weights,
-                         current_point, ath_norm, wh_norm, exit, ltp,
+                         eps_constraints, sigmin.value, absvmx.value,
+                         old_penalty_weights,
+                         current_point, ath_norm, wh_norm.value, exit, ltp,
                          restart_steps, ifree)
     if exit.value != 0
         @goto set_convergence
     end
-    code = Number_wrapper{Int64}(0)
-    eval = Number_wrapper{Int64}(0)
-    dim_a = Number_wrapper{Int64}(0)
-    check_last_step(iteration_number.value, restart.value, code, fsum, d1_norm,
+    check_last_step(iteration_number.value, restart.value, code, fsum.value,
+                    d1_norm,
                     d_norm, c, leading_dim_c, number_of_residuals,
                     number_of_parameters, rank_c2.value, d, current_residuals,
                     p3, d3, active_constraints, v, inactive_constraints,
-                    lmt.value, p4, time, a, leading_dim_a,
-                    number_of_equality_constraints,
-                    number_of_active_constraints.value, rank_a, b1_norm,
-                    hsum.value, number_of_householder, d1, p1, d2, p2, b,
+                    lmt.value, p4, time.value, a, leading_dim_a,
+                    number_of_equality_constraints.value,
+                    number_of_active_constraints.value, rank_a.value, b1_norm,
+                    hsum.value, number_of_householder.value, d1, p1, d2, p2, b,
                     current_constraints, number_of_constraints, fmat,
                     leading_dim_f, pivot, gmat, leading_dim_g, residuals!,
-                    constraints, current_point, hessian, added_constraint.value,
-                    deleted_constraint, scale, scaling_matrix,
+                    constraints!, current_point, hessian, added_constraints.value,
+                    deleted_constraints.value, scale, scaling_matrix,
                     search_direction, search_direction_norm, v1, eps_relative,
                     error, eval, beta_k, dim_a, dim_c2,
                     v2, u, ltp, restart_steps, ifree)
@@ -320,22 +333,20 @@ function nonlinear_least_square(current_point::Array{Float64},
     if code.value == 2 && restart_steps.value == 1
         coptyto!(old_penalty_weights, 1, current_point, 1, number_of_parameters)
     end
-    #dim_a nw?
-    #nohous existe
-    steplength = Number_wrapper{Float64}(0.)
-    lower_bound_steplength = Number_wrapper{Int64}(0)
-    upper_bound_steplength = Number_wrapper{Int64}(0)
-    index_upper_bound = Number_wrapper{Int64}(0)
-    steplength(restart.value, current_point, a, leading_dim_a, search_direction,
-               current_residuals, v1, number_of_residuals, fsum.value,
-               residuals!, rank_c2.value, code.value, current_constraints,
-               constraints!, active_constraints,
-               number_of_active_constraints.value, inactive_constraints, p4,
-               lmt, number_of_constraints, penalty_weights,
-               old_penalty_weights, dim_a, p_norm, number_of_householder, psi,
-               steplength, lower_bound_steplength, upper_bound_steplength,
-               number_of_eval, x_diff, error, index_upper_bound, wh_norm,
-               d, v2, s, g, ltp, restart_steps, wsave)
+    compute_steplength(restart.value, current_point, a, leading_dim_a,
+                       search_direction, number_of_parameters,
+                       current_residuals, v1,
+                       number_of_residuals, fsum.value, residuals!,
+                       rank_c2.value, code.value, current_constraints,
+                       constraints!, active_constraints,
+                       number_of_active_constraints.value, inactive_constraints,
+                       p4, lmt.value, number_of_constraints, penalty_weights,
+                       old_penalty_weights, dim_a.value, p_norm,
+                       number_of_householder.value,
+                       current_psi, steplength, lower_bound_steplength,
+                       upper_bound_steplength,
+                       number_of_eval, x_diff, error, index_upper_bound, wh_norm,
+                       d, v2, s, g, ltp, restart_steps, wsave)
     if error.value < -10
         @goto user_stop
     end
@@ -343,25 +354,27 @@ function nonlinear_least_square(current_point::Array{Float64},
     number_of_linesearch_eval.value += eval.value
 
     evaluation_restart(current_point, u, number_of_parameters,
-                       number_of_residuals, iteration_number, residuals,
+                       number_of_residuals, iteration_number, residuals!,
                        number_of_eval, current_residuals, d1_norm.value,
-                       d_norm.value, fsum.value, dim_c2.value, code.value,
+                       d_norm.value, fsum, dim_c2.value, code.value,
                        search_direction_norm.value, beta_k.value,
-                       alpha, alflow, active_constraints, current_constraints,
+                       steplength.value, lower_bound_steplength.value,
+                       active_constraints,
+                       current_constraints,
                        number_of_constraints, number_of_active_constraints.value,
                        constraints!, b1_norm.value, hsum, dim_a.value, error,
                        restart, ltp, restart_steps, ifree)
     if error.value < -10
         @goto user_stop
     end
-    added_constraint.value = false
+    added_constraints.value = false
     if restart.value || error.value == -1 || error.value == -5
         @goto iteration_loop
     end
 
     move_violated_constraints(current_constraints, active_constraints,
                               number_of_active_constraints, min_l_n,
-                              number_of_equality_constraints,
+                              number_of_equality_constraints.value,
                               inactive_constraints, lmt, ind,
                               iteration_number.value, added_constraints)
     output(verbose, iteration_number.value, nout, gres.value, penalty_weights,
@@ -373,7 +386,7 @@ function nonlinear_least_square(current_point::Array{Float64},
     convergence_factor.value = ((d1_norm.value + b1_norm.value)
                                 / max(ltp.betkm1, epsilon ^ 2))
     number_of_equality_constraints.value = number_of_active_constraints.value
-    rank.value = rank_c2 + rank_a.value
+    rank.value = rank_c2.value + rank_a.value
     return
 
     @label user_stop
@@ -387,13 +400,13 @@ function termination_criteria(rank_a::Int64, rank_c2::Int64, error::Int64,
                               number_of_equality_constraints::Int64,
                               nuber_of_active_constraints::Int64,
                               number_of_parameters::Int64, restart::Bool,
-                              deleted_constraint::Bool, maximum_iteration::Int64,
+                              deleted_constraints::Bool, maximum_iteration::Int64,
                               iteration_number::Int64, sq_sum_residuals::Float64,
                               d1_norm::Float64, sq_sum_constraints::Float64,
                               gres::Float64, current_point_norm::Float64,
                               gradient_norm::Float64, alfnoi::Float64,
-                              current_constraints::Array{Float64},
-                              inactive_constraints::Array{Int64},
+                              current_constraints::AbstractArray{Float64},
+                              inactive_constraints::AbstractArray{Int64},
                               number_of_inactive_constraints::Int64,
                               x_diff::Float64,
                               eps_absolute::Float64, eps_relative::Float64,
@@ -401,9 +414,9 @@ function termination_criteria(rank_a::Int64, rank_c2::Int64, error::Int64,
                               eps_current_constraints::Float64,
                               smallest_lagrange_mult::Float64,
                               largest_lagrange_mult::Float64,
-                              w_old::Array{Float64}, current_point::Array{Float64},
+                              w_old::AbstractArray{Float64}, current_point::AbstractArray{Float64},
                               ath_norm::Float64, wh_norm::Float64,
-                              exit::Number_wrapper{Float64},
+                              exit::Number_wrapper{Int64},
                               ltp::Last_two_points, restart_steps::Restart_steps,
                               ifree::Number_wrapper{Int64})
 
@@ -514,20 +527,20 @@ end
 """
 Replaces the subroutine STPLNG
 """
-function steplength(restart::Bool, current_point::Array{Float64},
-                    inactive_constraints_gradient::Array{Float64, 2},
-                    leading_dim_gradient::Int64, search_direction::Array{Float64},
+function compute_steplength(restart::Bool, current_point::AbstractArray{Float64},
+                    inactive_constraints_gradient::AbstractArray{Float64, 2},
+                    leading_dim_gradient::Int64, search_direction::AbstractArray{Float64},
                     number_of_parameters::Int64,
-                    current_residuals::Array{Float64}, v1::Array{Float64},
+                    current_residuals::AbstractArray{Float64}, v1::AbstractArray{Float64},
                     number_of_residuals::Int64, sq_sum_residuals::Float64,
                     residuals!::Function, rank_c2::Int64, code::Int64,
-                    current_constraints::Array{Float64}, constraints!::Function,
-                    active_constraints::Array{Int64},
+                    current_constraints::AbstractArray{Float64}, constraints!::Function,
+                    active_constraints::AbstractArray{Int64},
                     number_of_active_constraints::Int64,
-                    inactive_constraints::Array{Int64}, p4::Array{Int64},
+                    inactive_constraints::AbstractArray{Int64}, p4::AbstractArray{Int64},
                     number_of_inactive_constraints::Int64,
-                    number_of_constraints::Int64, penalty_weights::Array{Float64},
-                    old_penalty_weights::Array{Float64}, dim_a::Int64,
+                    number_of_constraints::Int64, penalty_weights::AbstractArray{Float64},
+                    old_penalty_weights::AbstractArray{Float64}, dim_a::Int64,
                     p_norm::Int64, number_of_householder::Int64,
                     psi::Number_wrapper{Float64},
                     steplength::Number_wrapper{Float64},
@@ -537,10 +550,10 @@ function steplength(restart::Bool, current_point::Array{Float64},
                     x_diff::Number_wrapper{Float64}, error::Number_wrapper{Int64},
                     index_upper_bound::Number_wrapper{Int64},
                     wh_norm::Number_wrapper{Float64},
-                    next_residuals::Array{Float64}, v2::Array{Float64},
-                    next_constraints::Array{Float64}, g::Array{Float64},
+                    next_residuals::AbstractArray{Float64}, v2::AbstractArray{Float64},
+                    next_constraints::AbstractArray{Float64}, g::AbstractArray{Float64},
                     ltp::Last_two_points, restart_steps::Restart_steps,
-                    wsave::Array{Float64, 2})
+                    wsave::AbstractArray{Float64, 2})
 
     c1 = 1.0e-3
     error.value = 0
@@ -560,11 +573,15 @@ function steplength(restart::Bool, current_point::Array{Float64},
     atwa = Number_wrapper{Float64}(0.)
     cdx = Number_wrapper{Float64}(0.)
     dxtctf = Number_wrapper{Float64}(0.)
-    penalty_weights(penalty_weights, old_penalty_weights, v1, current_residuals,
-           sq_sum_residuals, number_of_active_constraints, active_constraints,
-           current_constraints, number_of_constraints, p_norm, dim_a, wh_norm,
-           psi0, dpsi0, atwa, cdx, dxtctf, next_residuals, next_constraints,
-           v2, wsave)
+    compute_penalty_weights(penalty_weights, old_penalty_weights, v1,
+                            current_residuals,
+                            sq_sum_residuals, number_of_residuals,
+                            active_constraints, number_of_active_constraints,
+                            current_constraints, number_of_constraints, p_norm,
+                            dim_a, restart, wh_norm,
+                            psi0, dpsi0, atwa, cdx, dxtctf, next_residuals,
+                            next_constraints,
+                            v2, wsave)
     if dpsi0.value >= 0.0
         error.value = -1
     end
@@ -664,16 +681,18 @@ end
 """
 Replaces the subroutine EUCNRM
 """
-function update_penalty_euc_norm(va::Array{Float64},
-                                current_constraints::Array{Float64},
-                                active_constraints::Array{Int64},
+function update_penalty_euc_norm(va::AbstractArray{Float64},
+                                current_constraints::AbstractArray{Float64},
+                                active_constraints::AbstractArray{Int64},
                                 number_of_active_constraints::Int64,
                                 mu::Float64, va_norm::Float64, b_norm::Float64,
-                                dim_a::Int64, penalty_weights::Float64,
+                                 dim_a::Int64,
+                                 penalty_weights::AbstractArray{Float64},
                                 number_of_constraints::Int64,
-                                pset::Array{Int64}, y::Array{Float64},
-                                old_penalty_weights::Array{Float64},
-                                wsave::Array{Float64, 2})
+                                 pset::AbstractArray{Int64},
+                                 y::AbstractArray{Float64},
+                                old_penalty_weights::AbstractArray{Float64},
+                                wsave::AbstractArray{Float64, 2})
 
     if number_of_active_constraints <= 0
         return
@@ -687,7 +706,7 @@ function update_penalty_euc_norm(va::Array{Float64},
         j = active_constraints[i]
         ztw += va[i] ^ 2 * penalty_weights[j]
     end
-    ztw *= a_norm ^ 2
+    ztw *= va_norm ^ 2
     if ztw >= mu
         if number_of_active_constraints == dim_a
             @goto assort
@@ -699,7 +718,7 @@ function update_penalty_euc_norm(va::Array{Float64},
         y_el = 0.0
         for i = 1:number_of_active_constraints
             j =active_constraints[i]
-            y_el = va[i] * a_norm * (va[i] * a_norm + b_norm
+            y_el = va[i] * va_norm * (va[i] * va_norm + b_norm
                                      * current_constraints[j])
             if y_el > 0.0
                 nrp += 1
@@ -723,7 +742,7 @@ function update_penalty_euc_norm(va::Array{Float64},
         gamma = 0.0
         for i = 1:number_of_active_constraints
             j = active_constraints[i]
-            y_el = -va[i] * current_constraints[j] * a_norm * b_norm
+            y_el = -va[i] * current_constraints[j] * va_norm * b_norm
             if y_el > 0.0
                 nrp += 1
                 pset[nrp] = j
@@ -740,7 +759,7 @@ function update_penalty_euc_norm(va::Array{Float64},
     ctrl = 1
     for i = 1:number_of_active_constraints
         pset[i] = active_constraints[i]
-        y[i] = va[i] ^ 2 * a_norm ^ 2
+        y[i] = va[i] ^ 2 * va_norm ^ 2
     end
     minimize_euclidean_norm(ctrl, penalty_weights, number_of_constraints,
                             pset, number_of_active_constraints, y, mu,
@@ -755,10 +774,11 @@ end
 Replaces the subroutine MAXNRM
 """
 function update_penalty_max_norm(ata::Float64, rmy::Float64, alfa::Float64,
-                                 delta::Float64, penalty_weights::Array{Float64},
-                                 active_constraints::Array{Int64},
+                                 delta::Float64,
+                                 penalty_weights::AbstractArray{Float64},
+                                 active_constraints::AbstractArray{Int64},
                                  number_of_active_constraints::Int64,
-                                 wsave::Array{Float64, 2})
+                                 wsave::AbstractArray{Float64, 2})
     mu = rmy / ata
     if abs(alfa - 1.0) <= delta
         mu = 0.0
@@ -786,10 +806,10 @@ end
 """
 Replaces the subroutine ASSORT
 """
-function assort(u::Array{Float64, 2}, leading_dim_u::Int64, l::Int64, s::Int64,
-                t::Int64, active_constraints::Array{Int64},
-                penalty_weights::Array{Float64},
-                old_penalty_weights::Array{Float64})
+function assort(u::AbstractArray{Float64, 2}, leading_dim_u::Int64, l::Int64, s::Int64,
+                t::Int64, active_constraints::AbstractArray{Int64},
+                penalty_weights::AbstractArray{Float64},
+                old_penalty_weights::AbstractArray{Float64})
     k = 0
     w_k = 0.0
     for x = 1:t
@@ -813,15 +833,15 @@ Replaces the subroutine INIALC
 """
 function init_working_set(number_of_equality_constraints::Int64,
                           number_of_constraints::Int64,
-                          current_constraints::Array{Float64},
-                          active_constraints::Array{Int64},
+                          current_constraints::AbstractArray{Float64},
+                          active_constraints::AbstractArray{Int64},
                           number_of_active_constraints::Number_wrapper{Int64},
                           bnd::Int64, p_norm::Int64,
-                          inactive_constraints::Array{Int64},
+                          inactive_constraints::AbstractArray{Int64},
                           lmt::Number_wrapper{Int64},
-                          penalty_weights::Array{Float64},
-                          old_penalty_weights::Array{Float64},
-                          exit::Number_wrapper{Int64}, wsave::Array{Float64, 2})
+                          penalty_weights::AbstractArray{Float64},
+                          old_penalty_weights::AbstractArray{Float64},
+                          exit::Number_wrapper{Int64}, wsave::AbstractArray{Float64, 2})
 
     number_of_active_constraints.value = number_of_equality_constraints
     lmt.value = 0
@@ -879,8 +899,6 @@ function init_working_set(number_of_equality_constraints::Int64,
         active_constraints[number_of_active_constraints.value] = i
         active_constraints[j] = 1
     end
-    println("Number of active constraints at the end of initworkset")
-    println(number_of_active_constraints.value, " | ", bnd)
     if number_of_active_constraints > bnd
         exit.value = -8
     end
@@ -892,19 +910,19 @@ Replaces the subroutine GNDCHK
 function choose_search_method(b1_norm::Float64, d1_norm::Float64, d_norm::Float64,
                               sq_sum_constraints::Float64,
                               iteration_number::Int64, restart::Bool,
-                              d1apm1::Float64, constraints_added::Bool,
+                              d1apm1::Float64, added_constraints::Bool,
                               number_of_residuals::Int64,
                               number_of_parameters::Int64,
                               constraint_deleted::Bool,
-                              active_constraints::Array{Int64},
+                              active_constraints::AbstractArray{Int64},
                               number_of_equality_constraints::Int64,
-                              number_of_constraints::Int64,
-                              lagrange_mult::Array{Float64},
-                              inactive_constraints::Array{Int64},
+                              number_of_active_constraints::Int64,
+                              lagrange_mult::AbstractArray{Float64},
+                              inactive_constraints::AbstractArray{Int64},
                               number_of_inactive_constraints::Int64,
-                              current_constraints::Array{Float64},
+                              current_constraints::AbstractArray{Float64},
                               eps_relative::Float64, rank_a::Int64, scale::Int64,
-                              scaling_matrix::Array{Float64},
+                              scaling_matrix::AbstractArray{Float64},
                               beta_k::Number_wrapper{Float64},
                               method::Number_wrapper{Int64},
                               ltp::Last_two_points, restart_steps::Restart_steps,
@@ -1011,20 +1029,20 @@ end
 Replaces the subroutine SUBSPC
 """
 function subspace_dimension(restart::Bool, sq_sum_residuals::Float64,
-                            c::Array{Float64, 2}, leading_dim_c::Int64,
+                            c::AbstractArray{Float64, 2}, leading_dim_c::Int64,
                             number_of_residuals::Int64,
                             number_of_parameters::Int64, rank_c2::Int64,
-                            current_residuals::Array{Float64}, p3::Array{Int64},
-                            d3::Array{Float64}, a::Array{Float64, 2},
+                            current_residuals::AbstractArray{Float64}, p3::AbstractArray{Int64},
+                            d3::AbstractArray{Float64}, a::AbstractArray{Float64, 2},
                             leading_dim_a::Int64,
                             number_of_active_constraints::Int64, rank_a::Float64,
-                            sq_sum_constraints::Float64, p1::Array{Int64},
-                            d2::Array{Float64}, p2::Array{Int64},
-                            b::Array{Float64}, fmat::Array{Float64, 2},
-                            leading_dim_f::Int64, pivot::Array{Float64},
-                            gmat::Array{Float64, 2}, leading_dim_g::Int64,
-                            d::Array{Float64}, dx::Array{Float64},
-                            work_area::Array{Float64},
+                            sq_sum_constraints::Float64, p1::AbstractArray{Int64},
+                            d2::AbstractArray{Float64}, p2::AbstractArray{Int64},
+                            b::AbstractArray{Float64}, fmat::AbstractArray{Float64, 2},
+                            leading_dim_f::Int64, pivot::AbstractArray{Float64},
+                            gmat::AbstractArray{Float64, 2}, leading_dim_g::Int64,
+                            d::AbstractArray{Float64}, dx::AbstractArray{Float64},
+                            work_area::AbstractArray{Float64},
                             dim_a::Number_wrapper{Int64},
                             dim_c2::Number_wrapper{Int64}, ltp::Last_two_points,
                             restart_steps::Restart_steps,)
@@ -1158,8 +1176,8 @@ end
 """
 Replaces the subroutine RTD
 """
-function r_transpose_times_d_norm(r::Array{Float64, 2}, leading_dim_r::Int64,
-                                  n::Int64, d::Array{Float64})
+function r_transpose_times_d_norm(r::AbstractArray{Float64, 2}, leading_dim_r::Int64,
+                                  n::Int64, d::AbstractArray{Float64})
     sum = 0.0
     sum2 = 0.0
     for j = 1:n
@@ -1177,9 +1195,9 @@ Replaces the subroutine DIMUPP
 """
 function compute_solving_dim(restart::Bool, dim_latest_step::Int64,
                              obj_latest_step::Float64,
-                             rank_a::Int64, a::Array{Float64, 2},
-                             leading_dim_a::Int64, b::Array{Float64},
-                             work_area::Array{Float64},
+                             rank_a::Int64, a::AbstractArray{Float64, 2},
+                             leading_dim_a::Int64, b::AbstractArray{Float64},
+                             work_area::AbstractArray{Float64},
                              predicted_reduction_latest::Float64,
                              predictd_reduction_current::Float64,
                              steplength_latest_step::Float64,
@@ -1250,25 +1268,33 @@ end
 """
 Replaces the subroutine MULEST
 """
-function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::Array{Float64, 2},
+function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Float64, 2},
                                 leading_dim_a::Int64,
                                 number_of_active_constraints::Int64,
                                 number_of_parameters::Int64,
-                                gradient::Array{Float64}, bv::Array{Float64},
+                                gradient::AbstractArray{Float64}, bv::AbstractArray{Float64},
                                 deleted_column::Int64, tol::Float64,
-                                d1::Array{Float64}, h::Array{Float64, 2},
-                                leading_dim_h::Int64, pivot::Array{Float64},
-                                p::Array{Int64}, scale::Int64,
-                                scaling_matrix::Array{Float64},
-                                lagrange_mult::Array{Float64},
+                                d1::AbstractArray{Float64}, h::AbstractArray{Float64, 2},
+                                leading_dim_h::Int64, pivot::AbstractArray{Float64},
+                                p::AbstractArray{Int64}, scale::Int64,
+                                scaling_matrix::AbstractArray{Float64},
+                                lagrange_mult::AbstractArray{Float64},
                                 rank_a::Number_wrapper{Int64},
                                 residu::Number_wrapper{Float64},
-                                s::Array{Float64}, u::Array{Float64},
-                                w::Array{Float64})
+                                s::AbstractArray{Float64}, u::AbstractArray{Float64},
+                                w::AbstractArray{Float64})
     ctrl = time.value
     time.value += 1
     rank_a.value = number_of_active_constraints
     residu.value = 0
+    k1 = 0
+    k2 = 0
+    co = Number_wrapper{Float64}(0.)
+    si = Number_wrapper{Float64}(0.)
+    #both eta and com1 are used in the original code without being
+    #initialized so i don't know what value to start them at
+    eta = 0.
+    com1 = 0.
     if ctrl >= 2
         @goto compute_givens_rotations
     end
@@ -1279,11 +1305,10 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::Array{Float64, 2
     end
     a_to_lower_triangular(number_of_active_constraints, number_of_parameters,
                           p, a, leading_dim_a, tol, rank_a, d1, gradient)
-    for i = 1:rank_a
+    for i = 1:rank_a.value
         pivot[i] = a[i, i]
     end
-
-    p_transpose_times_v(p, number_of_active_constraints, bv, 1)
+    p_transpose_times_v(p, number_of_active_constraints, bv)
     solve_t_times_t(a, rank_a.value, gradient, lagrange_mult,
                     number_of_parameters, residu)
     ip1 = rank_a.value + 1
@@ -1292,8 +1317,9 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::Array{Float64, 2
             lagrange_mult[i] = 0.0
         end
     end
-    nonzero_first_order_lm(a, rank_a.value, bv, lagrange_mult, w, u)
-    p_times_v(p, number_of_active_constraints, lagrange_mult, 1)
+    nonzero_first_order_lm(a, rank_a.value, number_of_active_constraints,
+                           bv, lagrange_mult, w, u)
+    p_times_v(p, number_of_active_constraints, lagrange_mult)
     @goto back_transform
 
     @label compute_givens_rotations
@@ -1314,10 +1340,6 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::Array{Float64, 2
     end
     pi = eps(Float64)
     ist = deleted_column
-    k1 = 0
-    k2 = 0
-    co = Number_wrapper{Float64}(0.)
-    si = Number_wrapper{Float64}(0.)
     for i = delete_column:number_of_active_constraints
         ip1 = i + 1
         k1 = i
@@ -1408,13 +1430,14 @@ end
 """
 Replaces the subroutine WEIGHT
 """
-function penalty_weights(penalty_weights::Array{Float64},
-                         old_penalty_weights::Array{Float64},
-                         v1::Array{Float64}, current_residuals::Array{Float64},
+function compute_penalty_weights(penalty_weights::AbstractArray{Float64},
+                         old_penalty_weights::AbstractArray{Float64},
+                                 v1::AbstractArray{Float64},
+                                 current_residuals::AbstractArray{Float64},
                          sq_sum_residuals::Float64, number_of_residuals::Int64,
-                         active_constraints::Array{Int64},
+                         active_constraints::AbstractArray{Int64},
                          number_of_active_constraints::Int64,
-                         current_constraints::Array{Float64},
+                         current_constraints::AbstractArray{Float64},
                          number_of_constraints::Int64, p_norm::Int64,
                          dim_a::Int64, restart_in_old::Bool,
                          wh_norm::Number_wrapper{Float64},
@@ -1423,9 +1446,10 @@ function penalty_weights(penalty_weights::Array{Float64},
                          atwa::Number_wrapper{Float64},
                          ctc::Number_wrapper{Float64},
                          ctd::Number_wrapper{Float64},
-                         next_residuals::Array{Float64},
-                         next_constraints::Array{Float64}, v2::Array{Float64},
-                         wsave::Array{Float64, 2})
+                         next_residuals::AbstractArray{Float64},
+                                 next_constraints::AbstractArray{Float64},
+                                 v2::AbstractArray{Float64},
+                         wsave::AbstractArray{Float64, 2})
 
     delta = 0.25
     if restart_in_old
@@ -1433,7 +1457,7 @@ function penalty_weights(penalty_weights::Array{Float64},
     end
     mpt = number_of_residuals + number_of_active_constraints
     @views a_norm = BLAS.nrm2(number_of_residuals,
-                       v1[number_of_residuals+1:mpt], 1)
+                       v1[number_of_residuals+1:end], 1)
     a_norm_sq = a_norm ^ 2
     scale_vector(v1, a_norm, number_of_residuals+1, dim_a )
     btwa = 0.0
@@ -1445,8 +1469,8 @@ function penalty_weights(penalty_weights::Array{Float64},
         for i = 1:dim_a
             k = active_constraints[i]
             mpi = number_of_residuals + i
-            atwa.value += penalty_weights * v1[mpi] ^ 2
-            b_norm = max(abs(current_constraints), b_norm)
+            atwa.value += penalty_weights[k] * v1[mpi] ^ 2
+            b_norm = max(abs(current_constraints[k]), b_norm)
         end
         scale_vector(current_constraints, b_norm, 1, number_of_constraints)
         atwa.value *= a_norm ^ 2
@@ -1475,7 +1499,7 @@ function penalty_weights(penalty_weights::Array{Float64},
         alfa = (-btwa - ctd) / (atwa.value + c_norm_sq)
     end
 
-    psi_at_zero = sq_sum_residuals * 0.5
+    psi_at_zero.value = sq_sum_residuals * 0.5
     psi_derivative_at_zero = ctd
     atwa.value = 0.0
     whsum = 0.0
@@ -1486,7 +1510,7 @@ function penalty_weights(penalty_weights::Array{Float64},
     scale_vector(v1, a_norm, number_of_residuals+1, number_of_active_constraints)
     rmy = abs(-ctd - c_norm_sq) / delta - c_norm_sq
     pset = Array{Int64}(undef, number_of_active_constraints)
-    if p_norm.value == 0
+    if p_norm == 0
         update_penalty_max_norm(a_norm_sq, rmy, alfa, delta, penalty_weights,
                                 active_constraints, number_of_active_constraints,
                                 wsave)
@@ -1520,59 +1544,64 @@ function penalty_weights(penalty_weights::Array{Float64},
                  number_of_active_constraints)
     scale_vector(current_constraints, 1/b_norm, 1, number_of_constraints)
     scale_vector(v1, 1.0/c_norm, 1, number_of_residuals)
-    scale_vector(residuals, 1.0/d_norm, 1, number_of_residuals)
+    scale_vector(current_residuals, 1.0/d_norm, 1, number_of_residuals)
 end
 
 """
 Replaces the subroutine WRKSET
 in the dblwrkset.f file
 """
-function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
+function update_active_constraints(a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
                                    (number_of_active_constraints::
                                     Number_wrapper{Int64}),
                                    number_of_equality_constraints::Int64,
                                    number_of_parameters::Int64,
-                                   gradient_objective::Array{Float64},
-                                   minus_active_constraints::Array{Float64},
+                                   gradient_objective::AbstractArray{Float64},
+                                   minus_active_constraints::AbstractArray{Float64},
                                    tau::Float64, leading_dim_fmat::Int64,
                                    scale::Int64, iteration_number::Int64,
-                                   scaling_matrix::Array{Float64},
-                                   active_constraints::Array{Int64},
+                                   scaling_matrix::AbstractArray{Float64},
+                                   active_constraints::AbstractArray{Int64},
                                    min_l_n::Int64,
-                                   inactive_constraints::Array{Int64},
+                                   inactive_constraints::AbstractArray{Int64},
                                    (number_of_inactive_constraints::
                                     Number_wrapper{Int64}),
-                                   current_constraints::Array{Float64},
+                                   current_constraints::AbstractArray{Float64},
                                    gn_steplength_norm::Number_wrapper{Float64},
-                                   p4::Array{Int64},
-                                   jac_residuals::Array{Float64, 2},
+                                   p4::AbstractArray{Int64},
+                                   jac_residuals::AbstractArray{Float64, 2},
                                    leading_dim_jac_residuals::Int64,
                                    number_of_residuals::Int64,
-                                   current_residuals::Array{Float64},
+                                   current_residuals::AbstractArray{Float64},
                                    leading_dim_gmat::Int64,
-                                   current_point::Array{Float64},
+                                   current_point::AbstractArray{Float64},
                                    constraints!::Function, residuals!::Function,
                                    number_of_eval::Number_wrapper{Int64},
                                    number_of_jac_eval::Number_wrapper{Int64},
-                                   p2::Array{Int64}, p3::Array{Int64},
-                                   gn_search_direction::Array{Float64},
-                                   v1::Array{Float64}, d2::Array{Float64},
-                                   d3::Array{Float64},
+                                   p2::AbstractArray{Int64}, p3::AbstractArray{Int64},
+                                   gn_search_direction::AbstractArray{Float64},
+                                   v1::AbstractArray{Float64}, d2::AbstractArray{Float64},
+                                   d3::AbstractArray{Float64},
                                    rank_c2::Number_wrapper{Int64},
                                    d1_norm::Number_wrapper{Float64},
                                    d_norm::Number_wrapper{Float64},
                                    b1_norm::Number_wrapper{Float64},
-                                   d::Array{Float64}, gmat::Array{Float64, 2},
-                                   p1::Array{Int64}, v::Array{Float64},
-                                   d1::Array{Float64}, fmat::Array{Float64},
+                                   d::AbstractArray{Float64},
+                                   gmat::AbstractArray{Float64, 2},
+                                   p1::AbstractArray{Int64},
+                                   v::AbstractArray{Float64},
+                                   d1::AbstractArray{Float64},
+                                   fmat::AbstractArray{Float64},
                                    rank_a::Number_wrapper{Int64},
                                    gres::Number_wrapper{Float64},
                                    number_of_householder::Number_wrapper{Int64},
                                    (deleted_constraints_plus2::
                                     Number_wrapper{Int64}),
                                    deleted_constraints::Number_wrapper{Bool},
-                                   pivot::Array{Float64}, v2::Array{Float64},
-                                   s::Array{Float64}, u::Array{Float64},
+                                   pivot::AbstractArray{Float64},
+                                   v2::AbstractArray{Float64},
+                                   s::AbstractArray{Float64},
+                                   u::AbstractArray{Float64},
                                    ltp::Last_two_points,
                                    restart_steps::Restart_steps,)
 
@@ -1584,7 +1613,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
     tol = sqrt(Float64(number_of_active_constraints.value)) * tau
     del = false
 
-    estimated_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
+    estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                             number_of_active_constraints.value,
                             number_of_parameters, gradient_objective,
                             minus_active_constraints, (j.value), tol, d1, fmat,
@@ -1608,7 +1637,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
                 minus_active_constraints, j.value, noeq.value, active_constraints,
                 inactive_constraints, number_of_inactive_constraints,
                 p4, u, scale, scaling_matrix)
-        estimated_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
+        estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                                 number_of_active_constraints.value,
                                 number_of_parameters, gradient_objective,
                                 minus_active_constraints, j.value, tol,
@@ -1655,7 +1684,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
                          number_of_equality_constraints)
         j.value = 0
         deleted_constraints_plus2.value = 1
-        estimated_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
+        estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                                 number_of_active_constraints.value,
                                 number_of_parameters, minus_current_constraints,
                                 j.value, tol, d1, fmat, leading_dim_fmat,
@@ -1666,7 +1695,8 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
               number_of_active_constraints.value, number_of_parameters, d1, p1,
               rank_a.value, number_of_householder.value, minus_active_constraints,
               fmat, leading_dim_fmat, jac_residuals, leading_dim_jac_residuals,
-              number_of_residuals, current_residuals, pivot, tau, leading_dim_gmat,
+              number_of_residuals,
+              current_residuals, pivot, tau, leading_dim_gmat,
               scale, scaling_matrix, inactive_constraints,
               number_of_inactive_constraints.value, p4, p2, p3,
               gn_search_direction, v1, d2, d3, rank_c2, d1_norm, d_norm, b1_norm,
@@ -1683,7 +1713,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
                            jac_residuals, p1, scale, scaling_matrix, s, v, gres)
     sign_ch(deleted_constraints_plus2.value, p1, v,
             number_of_active_constraints.value, active_constraints,
-            min_l_n, d1_norm, d_norm.value, iteration_number, scale,
+            min_l_n, d1_norm.value, d_norm.value, iteration_number, scale,
             scaling_matrix, gres.value, current_constraints,
             number_of_equality_constraints, number_of_constraints, j, noeq,
             s, v2)
@@ -1695,7 +1725,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
             minus_current_constraints, j.value, noeq.value, active_constraints,
             inactive_constraints, number_of_inactive_constraints, p4, u, scale,
             scaling_matrix)
-    estimated_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
+    estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                             number_of_active_constraints.value,
                             number_of_parameters, minus_current_constraints,
                             j.value, tol, d1, fmat, leading_dim_fmat,
@@ -1705,7 +1735,7 @@ function update_active_constraints(a::Array{Float64, 2}, leading_dim_a::Int64,
                number_of_residuals, user_stop, jac_residuals,
                leading_dim_jac_residuals)
     if user_stop.value == 0
-        jacobian_forward_dif(current_point, number_of_parameters,
+        jacobian_forward_diff(current_point, number_of_parameters,
                              current_residuals, residuals!, jac_residuals,
                              leading_dim_jac_residuals, d, user_stop)
         number_of_eval.value += number_of_parameters

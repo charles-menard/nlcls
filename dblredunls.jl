@@ -9,16 +9,16 @@ respectively in `jac_constraints` and `jac_residuals`
 
 """
 
-function new_point(current_point::Array{Float64}, number_of_parameters::Int,
-                   current_constraints::Array{Float64},
-                   number_of_constraints::Int, current_residuals::Array{Float64},
+function new_point(current_point::AbstractArray{Float64}, number_of_parameters::Int,
+                   current_constraints::AbstractArray{Float64},
+                   number_of_constraints::Int, current_residuals::AbstractArray{Float64},
                    number_of_residuals::Int, constraints!::Function,
                    residuals!::Function, leading_dim_jac_constraints::Int,
                    leading_dim_jac_residuals::Int,
                    number_of_eval::Number_wrapper{Int},
-                   jac_constraints::Array{Float64, 2},
-                   jac_residuals::Array{Float64, 2},
-                   b::Array{Float64}, d::Array{Float64},
+                   jac_constraints::AbstractArray{Float64, 2},
+                   jac_residuals::AbstractArray{Float64, 2},
+                   b::AbstractArray{Float64}, d::AbstractArray{Float64},
                    user_stop::Number_wrapper{Int})
 
     ctrlc = Number_wrapper(2)
@@ -49,7 +49,6 @@ function new_point(current_point::Array{Float64}, number_of_parameters::Int,
                  number_of_constraints, ctrla, jac_constraints,
                  leading_dim_jac_constraints)
 
-    println("ctrla value ::::", ctrla.value)
     if ctrla.value < -10
         user_stop.value = ctrla.value
         return
@@ -70,9 +69,9 @@ end
 """
 Replaces the subroutine EQUAL
 """
-function equal(b::Array{Float64}, l::Int, a::Array{Float64,2},
-                leading_dim_a::Int, n::Int, active_constraints::Array{Int64},
-                t::Int, p::Int, p4::Array{Int64})
+function equal(b::AbstractArray{Float64}, l::Int, a::AbstractArray{Float64,2},
+                leading_dim_a::Int, n::Int, active_constraints::AbstractArray{Int64},
+                t::Int, p::Int, p4::AbstractArray{Int64})
     if l > 0
         for i=1:l
             p4[i] = i
@@ -94,8 +93,6 @@ function equal(b::Array{Float64}, l::Int, a::Array{Float64,2},
         for j=1:n
             a[i,j], a[ip, j] = a[ip, j], a[i, j]
         end
-        println("i, ip")
-        println(i, " ", ip)
         b[i], b[ip]= b[ip], b[i]
         for j = 1:t
             if i != p4[j]
@@ -112,12 +109,12 @@ Replaces the subroutine EVSCAL
 C     SCALE THE SYSTEM  A*DX = B    IF SO INDICATED BY FORMING
 C     A@D=DIAG*A      B@D=DIAG*B
 """
-function scale_system(scale::Int, jacobian::Array{Float64,2},
+function scale_system(scale::Int, jacobian::AbstractArray{Float64,2},
                       leading_dim_jacobian::Int,
                       number_of_active_constraints::Int64,
                       number_of_parameters::Int,
-                      neg_constraints::Array{Float64},
-                      scaling_matrix::Array{Float64})
+                      neg_constraints::AbstractArray{Float64},
+                      scaling_matrix::AbstractArray{Float64})
 
     if number_of_active_constraints == 0
         return
@@ -147,25 +144,25 @@ end
 """
 Replaces the subroutine GNSRCH
 """
-function gn_search(fmat_is_identity::Int, a::Array{Float64,2},
+function gn_search(fmat_is_identity::Int, a::AbstractArray{Float64,2},
                   leading_dim_a::Int, number_of_active_constraints::Int,
-                  number_of_parameters::Int, d1::Array{Float64}, p1::Array{Int},
-                  rank_a::Int, number_of_householder::Int, b::Array{Float64},
-                  fmat::Array{Float64,2}, leading_dim_f::Int,
-                  jac_residuals::Array{Float64,2},
-                  leading_dim_jac_residuals::Int,
-                  current_residuals::Array{Float64},pivot::Array{Float64},
+                  number_of_parameters::Int, d1::AbstractArray{Float64}, p1::AbstractArray{Int},
+                  rank_a::Int, number_of_householder::Int, b::AbstractArray{Float64},
+                  fmat::AbstractArray{Float64,2}, leading_dim_f::Int,
+                  jac_residuals::AbstractArray{Float64,2},
+                  leading_dim_jac_residuals::Int, number_of_residuals::Int64,
+                  current_residuals::AbstractArray{Float64},pivot::AbstractArray{Float64},
                   tau::Float64, leading_dim_g::Int, scale::Int,
-                  diag::Array{Float64}, inactive_constraints::Array{Int},
-                  number_of_inactive_constraints::Int, p4::Array{Float64,2},
-                  p2::Array{Int}, p3::Array{Int},
-                  gn_direction::Array{Float64}, v1::Array{Float64},
-                  d2::Array{Float64}, d3::Array{Float64},
+                  diag::AbstractArray{Float64}, inactive_constraints::AbstractArray{Int},
+                  number_of_inactive_constraints::Int, p4::AbstractArray{Int64},
+                  p2::AbstractArray{Int}, p3::AbstractArray{Int},
+                  gn_direction::AbstractArray{Float64}, v1::AbstractArray{Float64},
+                  d2::AbstractArray{Float64}, d3::AbstractArray{Float64},
                   rank_c2::Number_wrapper{Int}, d1_norm::Number_wrapper{Float64},
                   d_norm::Number_wrapper{Float64},
-                  b1_norm::Number_wrapper{Float64}, d::Array{Float64},
-                  work_area_s::Array{Float64}, work_area_u::Array{Float64},
-                  gmat::Array{Float64,2})
+                  b1_norm::Number_wrapper{Float64}, d::AbstractArray{Float64},
+                  work_area_s::AbstractArray{Float64}, work_area_u::AbstractArray{Float64},
+                  gmat::AbstractArray{Float64,2})
 
 
     code = 1
@@ -183,9 +180,9 @@ function gn_search(fmat_is_identity::Int, a::Array{Float64,2},
     kc2 = rank_a + 1
     nmp = number_of_parameters - rank_a
     tol = sqrt(Float64(nmp)) * tau
-    c2_to_upper_to_triangular(number_of_residuals, nmp,
-                              view(jac_residuals, :, kc2:number_of_parameters),
-                              leading_dim_c, tol, p3, rank_c2, d3)
+    @views c2_to_upper_triangular(number_of_residuals, nmp,
+                              jac_residuals[:, kc2:number_of_parameters],
+                              leading_dim_jac_residuals, tol, p3, rank_c2, d3)
     sub_search_direction(fmat_is_identity, a, leading_dim_a,
                          number_of_active_constraints, number_of_parameters,
                          d1, p1, rank_a, rank_a, number_of_householder,
@@ -193,18 +190,18 @@ function gn_search(fmat_is_identity::Int, a::Array{Float64,2},
                          leading_dim_jac_residuals,
                          number_of_residuals, current_residuals, pivot, gmat,
                          leading_dim_g, d2, p2, p3, d3, rank_c2.value,
-                         inactive_constraints, number_of_inactives_constraints,
+                         inactive_constraints, number_of_inactive_constraints,
                          p4, rank_c2.value, code, scale, diag, d, gn_direction,
                          v1, d1_norm, d_norm, b1_norm, work_area_u)
 end
 """
 Replaces the subroutine MINMAX
 """
-function min_max_langrange_mult(number_of_equality_constraints::Int64,
+function min_max_lagrange_mult(number_of_equality_constraints::Int64,
                                 number_of_active_constraints::Int64,
-                                estimated_lagrange_mult::Array{Float64},
+                                estimated_lagrange_mult::AbstractArray{Float64},
                                 scale::Int64,
-                                scaling_matrix::Array{Float64},
+                                scaling_matrix::AbstractArray{Float64},
                                 smallest_ineq_mult::Number_wrapper{Float64},
                                 max_mult::Number_wrapper{Float64} )
     if number_of_equality_constraints == number_of_active_constraints
@@ -212,13 +209,13 @@ function min_max_langrange_mult(number_of_equality_constraints::Int64,
     end
     tol = sqrt(eps(Float64))
     smallest_ineq_mult = 1e6
-    max_mult = 0.0
+    max_mult.value = 0.0
     current_scale = 0.0
     current_abs = 0.0
 
     for i = 1:number_of_active_constraints
         current_abs = abs(estimated_lagrange_mult[i])
-        if current_abs > max_mult.value
+        if current_abs > max_mult
             max_mult.value = current_abs
         end
         if i <= number_of_equality_constraints
@@ -228,7 +225,7 @@ function min_max_langrange_mult(number_of_equality_constraints::Int64,
         if scale != 0
             current_scale =1.0 / scaling_matrix[i]
         end
-        if -tol < estimated_lagrange_mult*current_scale
+        if -tol < estimated_lagrange_mult[i] * current_scale
             continue
         end
         if estimated_lagrange_mult < smallest_ineq_mult.value
@@ -243,50 +240,56 @@ function check_last_step(iteration_number::Int64, restart::Bool,
                          code::Number_wrapper{Int64}, sq_sum_residuals::Float64,
                          d1_norm::Number_wrapper{Float64},
                          d_norm::Number_wrapper{Float64},
-                         c::Array{Float64, 2}, leading_dim_c::Int64,
+                         c::AbstractArray{Float64, 2}, leading_dim_c::Int64,
                          number_of_residuals::Int64, number_of_parameters::Int64,
-                         rank_c2::Int64, d::Array{Float64},
-                         current_residuals::Array{Float64}, p3::Array{Float64},
-                         d3::Array{Float64}, active_constraints::Array{Int64},
-                         estimated_lagrange_mult::Array{Float64},
-                         inactive_constraints::Array{Int64},
+                         rank_c2::Int64, d::AbstractArray{Float64},
+                         current_residuals::AbstractArray{Float64},
+                         p3::AbstractArray{Int64},
+                         d3::AbstractArray{Float64},
+                         active_constraints::AbstractArray{Int64},
+                         estimated_lagrange_mult::AbstractArray{Float64},
+                         inactive_constraints::AbstractArray{Int64},
                          number_of_inactive_constraints::Int64,
-                         p4::Array{Int64}, deleted_constraints::Int64,
-                         a::Array{Float64, 2}, leading_dim_a::Int64,
+                         p4::AbstractArray{Int64}, deleted_constraints::Int64,
+                         a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
                          number_of_equality_constraints::Int64,
                          number_of_active_constraints::Int64,
                          rank_a::Int64, b1_norm::Number_wrapper{Float64},
                          sq_sum_constraints::Float64, number_of_householder::Int64,
-                         d1::Array{Float64},
-                         p1::Array{Int64}, d2::Array{Float64}, p2::Array{Int64},
-                         b::Array{Float64}, h::Array{Float64},
+                         d1::AbstractArray{Float64},
+                         p1::AbstractArray{Int64}, d2::AbstractArray{Float64},
+                         p2::AbstractArray{Int64},
+                         b::AbstractArray{Float64},
+                         current_constraints::AbstractArray{Float64},
                          number_of_constraints::Int64,
-                         fmat::Array{Float64, 2}, leading_dim_f::Int64,
-                         pivot::Array{Float64}, gmat::Array{Float64, 2},
+                         fmat::AbstractArray{Float64, 2}, leading_dim_f::Int64,
+                         pivot::AbstractArray{Float64},
+                         gmat::AbstractArray{Float64, 2},
                          leading_dim_g::Int64, residuals!::Function,
                          constraints!::Function,
-                         current_point::Array{Float64}, hessian::Bool,
+                         current_point::AbstractArray{Float64}, hessian::Bool,
                          constraint_added::Bool, constraint_deleted::Bool,
-                         scale::Int64, scaling_mat::Array{Float64, 2},
-                         gn_direction::Array{Float64},
+                         scale::Int64, scaling_mat::AbstractArray{Float64},
+                         gn_direction::AbstractArray{Float64},
                          gn_direction_norm::Number_wrapper{Float64},
-                         v1::Array{Float64}, relative_termination_tol::Float64,
+                         v1::AbstractArray{Float64},
+                         eps_relative::Float64,
                          error::Number_wrapper{Int64},
                          number_of_eval::Number_wrapper{Int64},
                          d1_plus_b1_norm::Number_wrapper{Float64},
                          dim_a::Number_wrapper{Int64},
-                         dim_c2::Number_wrapper{Int64}, v2::Array{Float64},
-                         work_area::Array{Float64},
+                         dim_c2::Number_wrapper{Int64}, v2::AbstractArray{Float64},
+                         work_area::AbstractArray{Float64},
                          ltp::Last_two_points, restart_steps::Restart_steps,
                          ifree::Number_wrapper{Int64}, )
 
     ind = Number_wrapper(0)
     if !restart
-        ind.value = ltp.rkckm1 + ltp.tm1 - number_of_active_constraints
+        ind.value = ltp.rkckm1 + ltp.tkm1 - number_of_active_constraints
         ind.value -= 1
-        @views ltp.d1km2 = norm(d[1:ind.value])
+        ltp.d1km2 = BLAS.nrm2(ind.value, d, 1)
     end
-    choose_search_direction(b1_norm.value, d1_norm.value, d_norm.value,
+    choose_search_method(b1_norm.value, d1_norm.value, d_norm.value,
                             sq_sum_constraints, iteration_number, restart,
                             ltp.d1km2, constraint_added, number_of_residuals,
                             number_of_parameters, constraint_deleted,
@@ -297,7 +300,7 @@ function check_last_step(iteration_number::Int64, restart::Bool,
                             eps_relative, rank_a, scale, scaling_mat,
                             d1_plus_b1_norm, ind, ltp, restart_steps, ifree)
     number_of_eval.value = 0
-    code.value = ind
+    code.value = ind.value
     error.value = 0
     if ind == 1
         dim_a.value = rank_a
@@ -358,68 +361,75 @@ end
 """
 Replaces subroutine SUBDIR
 """
-function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
+function sub_search_direction(deleted_constraints::Int64,
+                              a::AbstractArray{Float64, 2},
                               leading_dim_a::Int64,
                               number_of_active_constraints::Int64,
                               number_of_parameters::Int64,
-                              d1::Array{Float64}, p1::Array{Int64}, dim_a::Int64,
+                              d1::AbstractArray{Float64},
+                              p1::AbstractArray{Int64}, dim_a::Int64,
                               rank_a::Int64, number_of_householder::Int64,
-                              b::Array{Float64}, fmat::Array{Float64, 2},
+                              b::AbstractArray{Float64},
+                              fmat::AbstractArray{Float64, 2},
                               leading_dim_f::Int64,
-                              c::Array{Float64, 2}, leading_dim_c::Int64,
+                              c::AbstractArray{Float64, 2}, leading_dim_c::Int64,
                               number_of_residuals::Int64,
-                              current_residuals::Array{Float64},
-                              pivot::Array{Float64}, gmat::Array{Float64,2},
-                              leading_dim_g::Int64, d2::Array{Float64},
-                              p2::Array{Int64}, p3::Array{Int64},
-                              d3::Array{Float64}, dim_c2::Int64,
-                              inactive_constraints::Array{Int64},
+                              current_residuals::AbstractArray{Float64},
+                              pivot::AbstractArray{Float64},
+                              gmat::AbstractArray{Float64,2},
+                              leading_dim_g::Int64, d2::AbstractArray{Float64},
+                              p2::AbstractArray{Int64}, p3::AbstractArray{Int64},
+                              d3::AbstractArray{Float64}, dim_c2::Int64,
+                              inactive_constraints::AbstractArray{Int64},
                               number_of_inactive_constraints::Int64,
-                              p4::Array{Int64}, rank_c2::Int64, code::Int64,
-                              scale::Int64, scaling_matrix::Array{Float64},
-                              d::Array{Float64}, search_direction::Array{Float64},
-                              v1::Array{Float64}, d1_norm::Number_wrapper{Float64},
+                              p4::AbstractArray{Int64}, rank_c2::Int64,
+                              code::Int64,
+                              scale::Int64, scaling_matrix::AbstractArray{Float64},
+                              d::AbstractArray{Float64},
+                              search_direction::AbstractArray{Float64},
+                              v1::AbstractArray{Float64},
+                              d1_norm::Number_wrapper{Float64},
                               d_norm::Number_wrapper{Float64},
                               b1_norm::Number_wrapper{Float64},
-                              work_area::Array{Float64},)
+                              work_area::AbstractArray{Float64},)
     b1_norm.value = 0.0
     if number_of_active_constraints > 0
-        copyto!(seach_direction, 1, b, 1,
+        copyto!(search_direction, 1, b, 1,
                 number_of_active_constraints)
-        @views b1_norm.value = norm(search_direction[1:dim_a])
+        b1_norm.value = BLAS.nrm2(dim_a, search_direction, 1)
         z = number_of_residuals + number_of_active_constraints
-        search_direction_product(code, gmat, leading_dim_g, rank_a, dim_a,
+        @views search_direction_product(code, gmat, leading_dim_g, rank_a, dim_a,
                                  p1, d2, search_direction,
                                  number_of_active_constraints,
                                  number_of_householder, scale, scaling_matrix,
-                                 v1[number_of_residuals+1, z], work_area)
+                                 v1[number_of_residuals+1:end], work_area)
         if code == 1
-            lower_triangular_solve(leading_dim_a, a, search_direction)
+            lower_triangular_solve(number_of_active_constraints, a,
+                                   search_direction)
         else
-            upper_triangular_solve(leading_dim_g, gmat, search_direction)
+            upper_triangular_solve(dim_a, gmat, search_direction)
         end
     end
     for i = 1:number_of_residuals
         d[i] = -current_residuals[i]
     end
-    d_minus_c1_times_x1(dim_a, number_of_residuals, d, c, leading_dim_c,
-                        search_direction)
-    d_norm = norm(d)
+    d_minus_c1_times_x1(dim_a, number_of_residuals, d, c, search_direction)
+    d_norm.value = BLAS.nrm2(number_of_residuals, d, 1)
     k = 0
     if rank_c2 > 0
         for i=1:rank_c2
             k = rank_a + i
             @views householder_transform(2, i, i+1, number_of_residuals,
                                   c[:, k:number_of_parameters], 1,
-                                  d3[i], d, 1,
-                                  number_of_residuals, 1, c[i, k])
+                                  d3[i:end], d, 1,
+                                  number_of_residuals, 1, c[i:end, k:end])
         end
     end
-    @views d1_norm = d[1:dim_c2]
+    d1_norm.value = BLAS.nrm2(dim_c2, d, 1)
     k = rank_a + 1
     nmt = number_of_parameters - rank_a
-    orthogonal_projection(c, leading_dim_c, number_of_residuals, dim_a,
-                          search_direction, view(c, :, k:number_of_parameters),
+    @views orthogonal_projection(c, leading_dim_c, number_of_residuals, dim_a,
+                          search_direction, c[:, k:number_of_parameters],
                           rank_c2, dim_c2, d3,
                           d, v1)
     if nmt > 0
@@ -435,7 +445,7 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
         end
     end
     #??????
-    @views p_times_v(p2, nmt, search_direction[rank_a+1:number_of_parameters], 1)
+    @views p_times_v(p2, nmt, search_direction[rank_a+1:number_of_parameters])
     if code != 1
         p_times_v(p2, rank_a, search_direction, 1)
     end
@@ -475,9 +485,9 @@ function sub_search_direction(deleted_constraints::Int64, a::Array{Float64, 2},
         pivot_k_dummy.value = pivot[k]
         @views householder_transform(2, k, k+1, number_of_parameters,
                                      a[k:leading_dim_a, 1:end], leading_dim_a,
-                                     d1[k], search_direction, 1,
-                              leading_dim_a, 1,
-                              pivot[k])
+                                     d1[k:end], search_direction, 1,
+                                     leading_dim_a, 1,
+                                     pivot[k:end])
         d1[k], pivot[k] = d1_k_dummy.value, pivot_k_dummy.value
     end
 end
@@ -485,17 +495,17 @@ end
 """
 Replaces the subroutine UPBND
 """
-function upper_bound_steplength(a::Array{Float64, 2},
+function upper_bound_steplength(a::AbstractArray{Float64, 2},
                                 leading_dim_a::Int64,
                                 number_of_inactive_constraints::Int64,
                                 number_of_householder::Int64,
                                 number_of_active_constraints::Int64,
                                 number_of_parameters::Int64,
-                                current_constraints::Array{Float64},
-                                inactive_constraints::Array{Int64},
-                                p4::Array{Int64}, v1::Array{Float64},
+                                current_constraints::AbstractArray{Float64},
+                                inactive_constraints::AbstractArray{Int64},
+                                p4::AbstractArray{Int64}, v1::AbstractArray{Float64},
                                 number_of_residuals::Int64,
-                                search_direction::Array{Float64},
+                                search_direction::AbstractArray{Float64},
                                 upper_bound::Number_wrapper{Float64},
                                 upper_bound_cons_index::Number_wrapper{Int64})
 
@@ -542,11 +552,11 @@ end
 """
 Replaces subroutine EVADD
 """
-function move_violated_constraints(current_constraints::Array{Float64},
-                                   active_constraints::Array{Int64},
+function move_violated_constraints(current_constraints::AbstractArray{Float64},
+                                   active_constraints::AbstractArray{Int64},
                                    number_of_active_constraints::Number_wrapper{Int64},
                                    min_l_n::Int64, number_of_equality::Int64,
-                                   inactive_constraints::Array{Int64},
+                                   inactive_constraints::AbstractArray{Int64},
                                    number_of_inactive_constraints::Number_wrapper{Int64},
                                    ind::Int64, iteration_number::Int64,
                                    constraint_added::Number_wrapper{Bool})
@@ -614,7 +624,7 @@ check if the factor is inf or zero to avoid arith error
 
     vector ./= factor
 """
-function scale_vector(v::Array{Float64}, factor::Float64, start::Int64,
+function scale_vector(v::AbstractArray{Float64}, factor::Float64, start::Int64,
                       length::Int64)
     if factor == 0.0 || isinf(factor)
         return
@@ -627,22 +637,23 @@ end
 """
 Replaces the subroutine EVREST
 """
-function evaluation_restart(current_point::Array{Float64},
-                            previous_point::Array{Float64},
+function evaluation_restart(current_point::AbstractArray{Float64},
+                            previous_point::AbstractArray{Float64},
                             number_of_parameters::Int64,
                             number_of_residuals::Int64,
                             iteration_number::Number_wrapper{Int64},
                             residuals!::Function,
                             number_of_eval::Number_wrapper{Int64},
-                            current_residuals::Array{Float64}, d1_norm::Float64,
+                            current_residuals::AbstractArray{Float64},
+                            d1_norm::Float64,
                             d_norm::Float64,
                             sq_sum_previous_residuals::Number_wrapper{Float64},
                             dim_c2::Int64, code::Int64,
                             search_direction_norm::Float64,
                             d1_plus_b1_norm::Float64, current_steplength::Float64,
                             lower_bound_steplength::Float64,
-                            active_constraints::Array{Int64},
-                            current_constraints::Array{Float64},
+                            active_constraints::AbstractArray{Int64},
+                            current_constraints::AbstractArray{Float64},
                             number_of_constraints::Int64,
                             number_of_active_constraints::Int64,
                             constraints!::Function, b1_norm::Float64,
@@ -651,6 +662,8 @@ function evaluation_restart(current_point::Array{Float64},
                             restart::Number_wrapper{Bool}, ltp::Last_two_points,
                             restart_steps::Restart_steps,
                             ifree::Number_wrapper{Int64})
+
+    skip_count = false
 
     if (restart_steps.lattry != 0 || restart_steps.bestpg <= 0.0 ||
         (-1 != error.value && error.value > -3))
@@ -689,7 +702,6 @@ function evaluation_restart(current_point::Array{Float64},
         ltp.tkm1 = number_of_active_constraints
         ltp.kodkm1 = code
 
-        skip_count = false
         if -1 != error.value
             if error.value < 0
                 return
@@ -713,13 +725,12 @@ function evaluation_restart(current_point::Array{Float64},
             ltp.b1km1 = b1_norm
         end
     end
-    #55
-    copyto!(latest_point, 1, previous_point, 1, number_of_parameters)
+    copyto!(current_point, 1, previous_point, 1, number_of_parameters)
     if (abs(code)) == 2
         error.value =-5
     end
     ctrl = Number_wrapper(-1)
-    dummy = Array{Float64, 2}
+    dummy = Array{Float64, 2}(undef, 1, 1)
     residuals!(current_point, number_of_parameters, current_residuals,
                number_of_residuals, ctrl, dummy, 1)
     if ctrl.value < -10
@@ -727,7 +738,7 @@ function evaluation_restart(current_point::Array{Float64},
     end
     ctrl.value = -1
     constraints!(current_point, number_of_parameters, current_constraints,
-    number_of_active_constraints, ctrl, dummy, 1)
+                 number_of_active_constraints, ctrl, dummy, 1)
     if ctrl.value < -10
         error.value = ctrl.value
     end
@@ -739,9 +750,11 @@ end
 Replaces the subroutine OUTPUT
 """
 function output(printing_stepsize::Int64, iteration_number::Int64, unit::Int64,
-    gres::Float64, penalty_weights::Array{Float64},
-    active_constraints::Array{Int64}, convergence_factor::Number_wrapper{Float64},
-    ltp::Last_two_points, restart_steps::Restart_steps, )
+                gres::Float64, penalty_weights::AbstractArray{Float64},
+                active_constraints::AbstractArray{Int64},
+                convergence_factor::Number_wrapper{Float64},
+                ltp::Last_two_points, restart_steps::Restart_steps, )
+    println("OUTPUT :::::::::::::")
     if printing_stepsize <= 0
         return
     end
@@ -785,21 +798,21 @@ end
 Replaces the subroutine ADX
 """
 
-function search_direction_product(code::Int64, gmat::Array{Float64, 2},
+function search_direction_product(code::Int64, gmat::AbstractArray{Float64, 2},
                                   leading_dim_g::Int64,
                                   rank_a::Int64, number_of_non_zero_in_b::Int64,
-                                  p1::Array{Int64}, d2::Array{Float64},
-                                  b::Array{Float64},
+                                  p1::AbstractArray{Int64}, d2::AbstractArray{Float64},
+                                  b::AbstractArray{Float64},
                                   number_of_active_constraints::Int64,
                                   number_of_householder::Int64,
-                                  scale::Int64, scaling_matrix::Array{Float64},
-                                  product::Array{Float64},
-                                  work_area::Array{Float64})
+                                  scale::Int64, scaling_matrix::AbstractArray{Float64},
+                                  product::AbstractArray{Float64},
+                                  work_area::AbstractArray{Float64})
     k = 0
-    if dim_a != length(b)
-        k = dim_a + 1
-        for e in b[k:end]
-            e = 0.0
+    if number_of_non_zero_in_b != length(b)
+        k = number_of_non_zero_in_b + 1
+        for i in k:number_of_active_constraints
+            b[i] = 0.0
         end
     end
     copyto!(product, 1, b, 1, number_of_active_constraints)
@@ -817,8 +830,7 @@ function search_direction_product(code::Int64, gmat::Array{Float64, 2},
         permute(number_of_active_constraints, p1, product, work_area)
         copyto!(product, 1, work_area, 1, number_of_active_constraints)
     else
-        p_times_v(p1, number_of_active_constraints, product,
-                  number_of_active_constraints, 1)
+        p_times_v(p1, number_of_active_constraints, product)
     end
     if scale <= 0
         return
@@ -831,11 +843,11 @@ end
 Replaces the subroutine LTOUP
 
 """
-function l_to_upper_triangular(a::Array{Float64, 2}, leading_dim_a::Int64,
+function l_to_upper_triangular(a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
                                rank_a::Int64, number_of_parameters::Int64,
-                               b::Array{Float64}, leading_dim_g::Int64,
-                               p2::Array{Int64},
-                               gmat::Array{Float64,2}, d2::Array{Float64})
+                               b::AbstractArray{Float64}, leading_dim_g::Int64,
+                               p2::AbstractArray{Int64},
+                               gmat::AbstractArray{Float64,2}, d2::AbstractArray{Float64})
 
     p2[1:rank_a] = [1:rank_a]
     for i=1:number_of_parameters
@@ -871,24 +883,25 @@ end
 Replaces the subroutine ATOLOW
 """
 function a_to_lower_triangular(number_of_rows_a::Int64, length_g::Int64,
-                               p1::Array{Int64},
-                               a::Array{Float64, 2}, leading_dim_a::Int64,
+                               p1::AbstractArray{Int64},
+                               a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
                                tol::Float64, pseudo_rank_a::Number_wrapper{Int64},
-                               d1::Array{Float64},
-                               current_gradient::Array{Float64})
-    
+                               d1::AbstractArray{Float64},
+                               current_gradient::AbstractArray{Float64})
     pseudo_rank_a.value = number_of_rows_a
     if number_of_rows_a == 0
         return
     end
     ldiag = min(number_of_rows_a, length_g)
-    p1[1:ldiag] = [1:ldiag]
+    for i in 1:ldiag
+        p1[i] = i
+    end
     krank = 0
     imax = Number_wrapper{Int64}(0)
     rmax  = Number_wrapper{Float64}(0.)
     for i = 1:ldiag
         krank = i
-        max_partial_row_norm(number_of_rows_a, length_g, a, leading_dim_a,
+        max_partial_row_norm(number_of_rows_a, length_g, a,
                              i, i, imax, rmax)
         if rmax.value >= tol
             break
@@ -912,11 +925,12 @@ check how to pass view
 Replaces subroutine C2TOUP
 """
 
-function c2_to_upper_trianguar(number_of_rows_c2::Int64, number_of_col_c2::Int64,
-                               c2::Array{Float64, 2}, leading_dim_c2::Int64,
-                               tol::Float64, p3::Array{Int64},
+function c2_to_upper_triangular(number_of_rows_c2::Int64, number_of_col_c2::Int64,
+                                c2::AbstractArray{Float64, 2},
+                                leading_dim_c2::Int64,
+                               tol::Float64, p3::AbstractArray{Int64},
                                pseudo_rank_c2::Number_wrapper{Int64},
-                               d3::Array{Float64})
+                               d3::AbstractArray{Float64})
     pseudo_rank_c2.value = min(number_of_rows_c2, number_of_col_c2)
     if number_of_col_c2 == 0 || number_of_rows_c2 == 0
         return
@@ -955,13 +969,14 @@ end
 """
 Replaces the subroutine CDX
 """
-function orthogonal_projection(c1::Array{Float64, 2}, leading_dim_c::Int64,
-                               m::Int64, dim_a::Int64, b1::Array{Float64},
-                               c2::Array{Float64, 2}, rank_c2::Int64,
-                               non_zero_el_dv::Int64, d2::Array{Float64},
-                               dv::Array{Float64}, fprim::Array{Float64})
+function orthogonal_projection(c1::AbstractArray{Float64, 2}, leading_dim_c::Int64,
+                               m::Int64, dim_a::Int64, b1::AbstractArray{Float64},
+                               c2::AbstractArray{Float64, 2}, rank_c2::Int64,
+                               non_zero_el_dv::Int64, d2::AbstractArray{Float64},
+                               dv::AbstractArray{Float64},
+                               fprim::AbstractArray{Float64})
     for i = 1:m
-        fprim[i] = (i <= dim_c2) ? dv[i] : 0.0
+        fprim[i] = (i <= non_zero_el_dv) ? dv[i] : 0.0
     end
     if rank_c2 > 0
         k = 0
@@ -969,8 +984,8 @@ function orthogonal_projection(c1::Array{Float64, 2}, leading_dim_c::Int64,
             k = rank_c2 + 1 - i
             #??? parametres pivot_vector est une matrice
             @views householder_transform(2, k, k+1, m, c2[:, k:end], 1,
-                                         d2[k, k], fprim, 1,
-                                  m, 1, c2[k, k])
+                                         d2[k:end, k:end], fprim, 1,
+                                         m, 1, c2[k:end, k:end])
         end
     end
     if dim_a > 0
@@ -988,7 +1003,7 @@ end
 """
 Replaces subroutine ROWMAX
 """
-function max_partial_row_norm(m::Int64, n::Int64, a::Array{Float64, 2},
+function max_partial_row_norm(m::Int64, n::Int64, a::AbstractArray{Float64, 2},
                               starting_col::Int64,starting_row::Int64,
                               max_row_index::Number_wrapper{Int64},
                               max_row_norm::Number_wrapper{Float64})
@@ -1005,8 +1020,8 @@ end
 """
 Replaces de subroutine COLMAX
 """
-function max_partial_row_norm(m::Int64, n::Int64, a::Array{Float64, 2},
-                              starting_col::Int64,starting_row::Int64,
+function max_partial_row_norm(m::Int64, n::Int64, a::AbstractArray{Float64, 2},
+                              starting_col::Int64, starting_row::Int64,
                               max_col_index::Number_wrapper{Int64},
                               max_col_norm::Number_wrapper{Float64})
 
@@ -1022,7 +1037,7 @@ end
 """
 Replaces subroutine PRMROW 
 """
-function permute_rows(a::Array{Float64,2}, n::Int64, row1::Int64, row2::Int64)
+function permute_rows(a::AbstractArray{Float64,2}, n::Int64, row1::Int64, row2::Int64)
     if row1 == row2
         return
     end
@@ -1034,7 +1049,7 @@ end
 """
 Replaces subroutine PRMCOL
 """
-function permute_columns(a::Array{Float64, 2}, m::Int64, col1::Int64,
+function permute_columns(a::AbstractArray{Float64, 2}, m::Int64, col1::Int64,
     col2::Int64)
 
     for i = 1:m
@@ -1047,19 +1062,32 @@ end
 
 Replaces subroutine PTRV
 """
-function p_transpose_times_v(p::Array{Int64}, m::Int64, v::Array{Float64,2},
-    n::Int64)
+function p_transpose_times_v(p::AbstractArray{Int64}, m::Int64,
+                             v::AbstractArray{Float64,2}, n::Int64)
     if m <= 0 || n <= 0
         return
     end
     for i = 1:m
-        permute_rows(a=v, n=n, row1=i, row2=p[i])
+        permute_rows(v, n, i, p[i])
+    end 
+end
+
+function p_transpose_times_v(p::AbstractArray{Int64}, m::Int64,
+                             v::AbstractArray{Float64},
+                            )
+    if m <= 0
+        return
+    end
+    for i = 1:m
+        v[i], v[p[i]] = v[p[i]], v[i]
     end
 end
+
 """
 Replaces subroutine VPTR 
 """
-function v_times_p_transpose(p::Array{Int64}, m::Int64, v::Array{Float64,2},
+function v_times_p_transpose(p::AbstractArray{Int64}, m::Int64,
+                             v::AbstractArray{Float64,2},
     n::Int64)
     if m <= 0 || n <= 0
         return
@@ -1067,14 +1095,14 @@ function v_times_p_transpose(p::Array{Int64}, m::Int64, v::Array{Float64,2},
     k = 0
     for i = 1:m
         k = m + 1 - i
-        permute_columns(a=v,m=m, col1=k, col2=p[k])
+        permute_columns(v,m, k, p[k])
     end
 end
 
 """
 Replaces subroutine PV
 """
-function p_times_v(p::Array{Int64}, m::Int64, v::Array{Float64,2},
+function p_times_v(p::AbstractArray{Int64}, m::Int64, v::AbstractArray{Float64,2},
                                    n::Int64)
     if m <= 0 || n <= 0
         return
@@ -1082,17 +1110,17 @@ function p_times_v(p::Array{Int64}, m::Int64, v::Array{Float64,2},
     k = 0
     for i = 1:m
         k = m + 1 - i
-        permute_rows(a=v, n=n, row1=k, row2=p[k])
+        permute_rows(v, n, k, p[k])
     end
 end
 
-function p_times_v(p::Array{Int64}, m::Int64, v::Array{Float64})
+function p_times_v(p::AbstractArray{Int64}, m::Int64, v::AbstractArray{Float64})
     if m <= 0
         return
     end
     for i = 1:m
         k = m + 1 - i
-        v[k], v[p[k]] = v[p[k]], v[k]
+        v[i], v[p[i]] = v[p[i]], v[i]
     end
 end
 
@@ -1100,21 +1128,21 @@ end
 Replaces subroutine VP
 v is a matrix M*N
 """
-function v_times_p(v::Array{Float64, 2},
-                   m::Int64, n::Int64, p::Array{Int64})
+function v_times_p(v::AbstractArray{Float64, 2},
+                   m::Int64, n::Int64, p::AbstractArray{Int64})
     if m <= 0 || n <= 0
         return
     end
     for i = 1:n
-        permute_columns(a=v, m=m, col1=i, col2=p[i])
+        permute_columns(v, n, i, p[i])
     end
 end
-function v_times_p(v::Array{Float64},
-                   n::Int64, p::Array{Int64})
+function v_times_p(v::AbstractArray{Float64},
+                   n::Int64, p::AbstractArray{Int64})
     if n <= 0
         return
     end
-    for i = 1:n
+    for i in 1:n
         v[i], v[p[i]] = v[p[i]], v[i]
     end
 end
@@ -1145,15 +1173,15 @@ function householder_transform(mode::Int64, pivot_index::Int64, l1::Int64,
             return
         end
         cl_inverse = 1.0 / cl
-        sm = (pivot.value * cl_inverse) ^ 2
+        sm = (pivot[1] * cl_inverse) ^ 2
         for j = l1:m
             sm += (pivot_vector[1, j] * cl_inverse) ^ 2
         end
         sm1 = sm
         cl *= sqrt(sm1)
         cl *= -1
-        up.value = pivot.value - cl
-        pivot.value = cl
+        up[1]= pivot[1] - cl
+        pivot[1] = cl
     end
     #60
     if cl <= 0 && mode == 2
@@ -1162,7 +1190,7 @@ function householder_transform(mode::Int64, pivot_index::Int64, l1::Int64,
     if number_of_vectors_c <= 0
         return
     end
-    b = up.value * pivot.value
+    b = up[1] * pivot[1]
     if b >= 0
         return
     end
@@ -1175,7 +1203,7 @@ function householder_transform(mode::Int64, pivot_index::Int64, l1::Int64,
         i2 += inc_vectors_c
         i3 = i2 + incr
         i4 = i3
-        sm = c[i2] * up.value
+        sm = c[i2] * up[1]
         for i = l1:m
             sm+= c[i3] * u[1,i]
             i3 += inc_elements_c
@@ -1184,7 +1212,7 @@ function householder_transform(mode::Int64, pivot_index::Int64, l1::Int64,
             continue
         end
         sm *= b
-        c[i2] += sm * up.value
+        c[i2] += sm * up[1]
         for i = l1:m
             c[i4] += sm * u[1,i]
             i4 *= inc_elements_c
@@ -1194,12 +1222,12 @@ end
 """
 Replaces the subroutine CH
 """
-function c_times_h(m::Int64, n::Int64, c::Array{Float64, 2}, leading_dim_c::Int64,
-    h::Array{Float64, 2}, leading_dim_h::Int64, work_area::Array{Float64})
+function c_times_h(m::Int64, n::Int64, c::AbstractArray{Float64, 2}, leading_dim_c::Int64,
+    h::AbstractArray{Float64, 2}, leading_dim_h::Int64, work_area::AbstractArray{Float64})
     sum = 0.0
     for i = 1:m
         for j in 1:n
-            work_area = c[i, j]
+            work_area[j] = c[i, j]
         end
         for j = 1:n
             sum = 0.0
@@ -1213,8 +1241,8 @@ end
 """
 Replaces the subroutine HXCOMP
 """
-function h_times_x(h::Array{Float64, 2}, leading_dim_h, n::Int64, x::Array{Float64},
-    s::Array{Float64})
+function h_times_x(h::AbstractArray{Float64, 2}, leading_dim_h, n::Int64, x::AbstractArray{Float64},
+    s::AbstractArray{Float64})
     copyto!(s, 1, x, 1, n)
     sum = 0.0
     for i = 1:n
@@ -1229,8 +1257,8 @@ end
     Replaces the subroutine GIVEN2
 """
 
-function apply_rotation(c::Float64, s::Float64, x::Array{Float64},
-                        y::Array{Float64})
+function apply_rotation(c::Float64, s::Float64, x::AbstractArray{Float64},
+                        y::AbstractArray{Float64})
     xt = c * x[1] + s * y[1]
     y[1] = s * x[1] - c * y[1]
     x[1] = xt
@@ -1238,7 +1266,7 @@ end
 """
 Replaces subroutine PSPECF
 """
-function permute(n::Int64, p::Array{Int64}, w::Array{Float64}, f::Array{Float64})
+function permute(n::Int64, p::AbstractArray{Int64}, w::AbstractArray{Float64}, f::AbstractArray{Float64})
 
     if n <= 0
         return
@@ -1251,9 +1279,9 @@ end
 Replaces the subroutine PROD1
 """
 
-function multiply_matrices_and_transpose(h::Array{Float64, 2},
-    leading_dim_h::Int64, s::Array{Float64}, p::Array{Float64},
-    beta::Array{Float64}, j::Int64, tp1::Int64)
+function multiply_matrices_and_transpose(h::AbstractArray{Float64, 2},
+    leading_dim_h::Int64, s::AbstractArray{Float64}, p::AbstractArray{Float64},
+    beta::AbstractArray{Float64}, j::Int64, tp1::Int64)
 
     if j > tp1
         return
@@ -1272,43 +1300,47 @@ end
 """
 Replaces subroutine CQHP2
 """
-function c_q1_h_p2_product(time::Int64, c::Array{Float64, 2}, leading_dim_c::Int64,
+function c_q1_h_p2_product(time::Int64, c::AbstractArray{Float64, 2}, leading_dim_c::Int64,
                            m::Int64, n::Int64, t::Int64, pseudo_rank_a::Int64,
-                           pivot::Array{Float64}, na::Int64, a::Array{Float64},
-                           leading_dim_a::Int64, d1::Array{Float64},
-                           h::Array{Float64, 2}, leading_dim_h::Int64,
-                           p2::Array{Int64}, v::Array{Float64})
+                           pivot::AbstractArray{Float64}, na::Int64,
+                           a::AbstractArray{Float64},
+                           leading_dim_a::Int64, d1::AbstractArray{Float64},
+                           h::AbstractArray{Float64, 2}, leading_dim_h::Int64,
+                           p2::AbstractArray{Int64}, v::AbstractArray{Float64})
 
     if na == 0
         return
     end
     for i = 1:na
-        @views householder_transform(mode=2, pivot_index=i, l1=i+1, m=n,
+        @views householder_transform(2, i, i+1, n,
                               a[i:end, :],
-                              pivot_vect_number_rows=leading_dim_a,
-                              up=d1[i], c=c, inc_elements_c=leading_dim_c,
-                              inc_vectors_c=1, number_of_vectors_c=m,
-                              pivot=pivot[i])
+                              leading_dim_a,
+                              d1[i:end], c, leading_dim_c,
+                              1, m,
+                              pivot[i:end])
     end
     if time > 2 || !(time == 3 && t == 0)
-        c_times_h(m=m, n=n, c=c, leading_dim_c=leading_dim_c, h=h,
-        leading_dim_h=leading_dim_h, work_area=v)
+        c_times_h(m, n, c, leading_dim_c, h,
+        leading_dim_h, v)
     end
     if pseudo_rank_a == t
         return
     end
-    v_times_p(v=c, m=m, n=pseudo_rank_a, p=p2)
+    v_times_p(c, m, pseudo_rank_a, p2)
 end
 """
 Replaces subroutine SIGNCH
 """
-function sign_ch(time::Int64, p1::Array{Int64}, v::Array{Float64}, t::Int64,
-                 active_constraint::Array{Int64}, bnd::Int64, betkm1::Float64,
-                 gnd_norm::Float64, iteration_number::Int64, scale::Int64,
-                 scaling_matrix::Array{Float64}, gres::Float64,
-                 h::Array{Float64}, kp::Int64, l::Int64, j::Number_wrapper{Int64},
-                 s::Number_wrapper{Int64}, p2::Array{Float64},
-                 working_area::Array{Float64})
+function sign_ch(time::Int64, p1::AbstractArray{Int64},
+                 v::AbstractArray{Float64}, t::Int64,
+                 active_constraints::AbstractArray{Int64}, bnd::Int64,
+                 betkm1::Float64, gnd_norm::Float64, iteration_number::Int64,
+                 scale::Int64,
+                 scaling_matrix::AbstractArray{Float64}, gres::Float64,
+                 h::AbstractArray{Float64}, kp::Int64, l::Int64,
+                 j::Number_wrapper{Int64},
+                 s::Number_wrapper{Int64}, p2::AbstractArray{Float64},
+                 working_area::AbstractArray{Float64})
     ival = 4
     delta = 10.0
     tau = 0.5
@@ -1322,7 +1354,7 @@ function sign_ch(time::Int64, p1::Array{Int64}, v::Array{Float64}, t::Int64,
     current_el = 0.0
     k = 0
     for i = kp1:t
-        k.value = active_constraints[i]
+        k = active_constraints[i]
         if scale == 0
             current_el = scaling_matrix[i]
         else
@@ -1340,7 +1372,10 @@ function sign_ch(time::Int64, p1::Array{Int64}, v::Array{Float64}, t::Int64,
     if gres > -e * delta
       return
     end
-    k = active_constraints[s]
+    if s == 0
+        return
+    end
+    k = active_constraints[s.value]
     i = bnd + k.value - kp
     if (active_constraints[i] != 1 &&
         iteration_number - active_constraints[i] < ival &&
@@ -1355,7 +1390,7 @@ function sign_ch(time::Int64, p1::Array{Int64}, v::Array{Float64}, t::Int64,
         for i = 1:t
             p2[i] = i + 0.1
         end
-        p_times_v(p=p1, m=t, v=p2, n=1)
+        p_times_v(p1, t, p2)
         for i = 1:t
             p1[i] = Int64(p2[i]) 
         end
@@ -1391,15 +1426,15 @@ end
 """
 Replaces subroutine REORD
 """
-function reorder(a::Array{Float64, 2},
+function reorder(a::AbstractArray{Float64, 2},
                  number_of_active_constraints::Number_wrapper{Int64},
-                 number_of_variables::Int64, bv::Array{Float64},
+                 number_of_variables::Int64, bv::AbstractArray{Float64},
                  row_of_l_to_delete::Int64, s::Int64,
-                 active_constraints::Array{Int64},
-                 inactive_constraints::Array{Int64},
+                 active_constraints::AbstractArray{Int64},
+                 inactive_constraints::AbstractArray{Int64},
                  number_of_inactive_constraints::Number_wrapper{Int64},
-                 p4::Array{Int64}, working_area::Array{Float64},scale::Int64,
-                 scaling_matrix::Array{Float64})
+                 p4::AbstractArray{Int64}, working_area::AbstractArray{Float64},scale::Int64,
+                 scaling_matrix::AbstractArray{Float64})
 
     tm1 = number_of_active_constraints.value - 1
     if row_of_l_to_delete != t
@@ -1435,8 +1470,8 @@ end
 """
 Replaces subroutine ATSOLV
 """
-function solve_t_times_t(a::Array{Float64, 2}, t::Int64, b::Array{Float64},
-                                 x::Array{Float64}, n::Int64,
+function solve_t_times_t(a::AbstractArray{Float64, 2}, t::Int64, b::AbstractArray{Float64},
+                                 x::AbstractArray{Float64}, n::Int64,
                                  residue::Number_wrapper{Float64})
     j = 0
     l = 0
@@ -1459,8 +1494,8 @@ end
 """
 Replaces the subroutine GRAD
 """
-function gradient(jacobian::Array{Float64, 2}, m::Int64, n::Int64,
-                  residuals::Array{Float64}, gradient::Array{Float64})
+function gradient(jacobian::AbstractArray{Float64, 2}, m::Int64, n::Int64,
+                  residuals::AbstractArray{Float64}, gradient::AbstractArray{Float64})
     gs = 0.0
     for i = 1:n
         gs = 0.0
@@ -1473,7 +1508,7 @@ end
 """
 Replaces the subroutine QUAMIN
 """
-function minimize_quadratic!(x1::Float64, y1::Float64, x2::Float64,
+function minimize_quadratic(x1::Float64, y1::Float64, x2::Float64,
                                      y2::Float64, x3::Float64, y3::Float64,
                                      min_of_f::Number_wrapper{Float64})
     d1 = y3 - y1
@@ -1485,8 +1520,8 @@ end
 """
 Replaces the subroutine DELETE
 """
-function delete_constraints(active_constraints::Array{Int64},
-                           inactive_constraints::Array{Int64},
+function delete_constraints(active_constraints::AbstractArray{Int64},
+                           inactive_constraints::AbstractArray{Int64},
                            number_of_inactive_constraints::Number_wrapper{Int64},
                            number_of_active_constraints::Number_wrapper{Int64},
                            constraints_to_delete::Int64)
@@ -1501,8 +1536,8 @@ end
 """
 Replaces the subroutine ADDIT
 """
-function add_constraints(active_constraints::Array{Int64},
-                        inactive_constraints::Array{Int64},
+function add_constraints(active_constraints::AbstractArray{Int64},
+                        inactive_constraints::AbstractArray{Int64},
                         number_of_active_constraints::Number_wrapper{Int64},
                         number_of_inactive_constraints::Number_wrapper{Int64},
                         constraints_to_add::Int64)
@@ -1517,22 +1552,22 @@ end
 """
 Replaces the subroutine LINEC
 """
-function linesearch_steplength(current_point::Array{Float64},
-                    search_direction::Array{Float64},
-                    current_residuals::Array{Float64}, v1::Array{Float64},
+function linesearch_steplength(current_point::AbstractArray{Float64},
+                    search_direction::AbstractArray{Float64},
+                    current_residuals::AbstractArray{Float64}, v1::AbstractArray{Float64},
                     number_of_residuals::Int64, current_point_dim::Int64,
                     alpha::Number_wrapper{Float64}, psi_at_zero::Float64,
                     derivative_psi_at_zero::Float64,
                     steplength_lower_bound::Float64, residuals!::Function,
-                    constraints!::Function, current_constraints::Array{Float64},
-                    next_constraints, active_constraints::Array{Int64},
+                    constraints!::Function, current_constraints::AbstractArray{Float64},
+                    next_constraints, active_constraints::AbstractArray{Int64},
                     number_of_active_constraints::Int64,
-                    inactive_constraints::Array{Int64},
+                    inactive_constraints::AbstractArray{Int64},
                     number_of_inactive_constraints::Int64,
-                    number_of_constraints::Int64,w::Array{Float64},
+                    number_of_constraints::Int64,w::AbstractArray{Float64},
                     steplength_upper_bound::Float64,
-                    next_residuals::Array{Float64}, v2::Array{Float64},
-                    g::Array{Float64}, psi_at_alpha::Number_wrapper{Float64},
+                    next_residuals::AbstractArray{Float64}, v2::AbstractArray{Float64},
+                    g::AbstractArray{Float64}, psi_at_alpha::Number_wrapper{Float64},
                     x_diff_norm::Float64, number_of_eval::Number_wrapper{Int64},
                     exit::Number_wrapper{Int64})
 
@@ -1733,10 +1768,10 @@ end
 Replaces the subroutine CONCAT
 modifies f
 """
-function concat(f::Array{Float64}, m::Int64, h::Array{Float64},
-                active_constraints::Array{Int64}, t::Int64,
-                inactive_constraints::Array{Float64}, q::Int64,
-                w::Array{Float64})
+function concat(f::AbstractArray{Float64}, m::Int64, h::AbstractArray{Float64},
+                active_constraints::AbstractArray{Int64}, t::Int64,
+                inactive_constraints::AbstractArray{Float64}, q::Int64,
+                w::AbstractArray{Float64})
     j = 0
     k = 0
     if t != 0
@@ -1762,13 +1797,13 @@ end
 Replaces the subroutine linc2
 Modifies the parameters current_residuals, new_residuals, v1, v2
 """
-function linc2(m::Int64, n::Int64, v1::Array{Float64},
-               next_residuals::Array{Float64}, current_residuals::Array{Float64},
-               alfk::Float64, current_constraints::Array{Float64},
-               next_constraints::Array{Float64}, t::Int64,
-               active_constraints::Array{Int64}, w::Array{Float64},
-               inactive_constraints::Array{Int64}, q::Int64, l::Int64,
-               v2::Array{Float64})
+function linc2(m::Int64, n::Int64, v1::AbstractArray{Float64},
+               next_residuals::AbstractArray{Float64}, current_residuals::AbstractArray{Float64},
+               alfk::Float64, current_constraints::AbstractArray{Float64},
+               next_constraints::AbstractArray{Float64}, t::Int64,
+               active_constraints::AbstractArray{Int64}, w::AbstractArray{Float64},
+               inactive_constraints::AbstractArray{Int64}, q::Int64, l::Int64,
+               v2::AbstractArray{Float64})
     concat(current_residuals, m, current_constraints, active_constraints,
            t, inactive_constraints, q, w)
     concat(next_residuals, m, next_constraints, active_constraints,
@@ -1809,14 +1844,14 @@ Replaces the subroutine REDC
 function reduce(alpha::Number_wrapper{Float64},
                 psi_at_alpha::Number_wrapper{Float64}, alpha_k::Float64,
                 pk::Float64, diff::Float64, eta::Float64,
-                current_point::Float64, p::Array{Float64},
-                current_residuals::Array{Float64},
-                next_point::Array{Float64}, next_residuals::Array{Float64},
+                current_point::Float64, p::AbstractArray{Float64},
+                current_residuals::AbstractArray{Float64},
+                next_point::AbstractArray{Float64}, next_residuals::AbstractArray{Float64},
                 number_of_residuals::Int64, n::Int64, residuals!::Function,
-                current_constraints::Array{Float64},
-                next_constraints::Array{Float64}, constraints!::Function,
-                t::Int64, l::Int64, active_constraints::Array{Int64},
-                w::Array{Float64},
+                current_constraints::AbstractArray{Float64},
+                next_constraints::AbstractArray{Float64}, constraints!::Function,
+                t::Int64, l::Int64, active_constraints::AbstractArray{Int64},
+                w::AbstractArray{Float64},
                 k::Number_wrapper{Int64}, psi_k::Float64,
                 reduction_likely::Number_wrapper{Bool})
     ctrl = 0
@@ -1869,18 +1904,18 @@ end
 """
 Replaces the subroutine GAC
 """
-function goldstein_armijo_condition(current_point::Array{Float64},
-                                    p::Array{Float64}, f::Array{Float64}, m::Int64,
+function goldstein_armijo_condition(current_point::AbstractArray{Float64},
+                                    p::AbstractArray{Float64}, f::AbstractArray{Float64}, m::Int64,
                                     n::Int64, residuals!::Function,
                                     constraints!::Function,
-                                    current_constraints::Array{Float64},
-                                    active_constraints::Array{Float64},
-                                    t::Int64, l::Int64, w::Array{Float64},
+                                    current_constraints::AbstractArray{Float64},
+                                    active_constraints::AbstractArray{Float64},
+                                    t::Int64, l::Int64, w::AbstractArray{Float64},
                                     k::Number_wrapper{Int64},
                                     alpha_lower_bound::Float64,
                                     exit::Number_wrapper{Int64},
-                                    next_point::Array{Float64},
-                                    next_residuals::Array{Float64},
+                                    next_point::AbstractArray{Float64},
+                                    next_residuals::AbstractArray{Float64},
                                     psi_at_zero::Float64, dpsi_at_zero::Float64,
                                     u::Number_wrapper{Float64},
                                     psi_at_u::Number_wrapper{Float64},
@@ -1921,7 +1956,7 @@ end
 """
 Replaces the subroutine LINC1
 """
-function linc1(p::Array{Float64}, n::Int64, alpha::Float64,
+function linc1(p::AbstractArray{Float64}, n::Int64, alpha::Float64,
                alpha_lower_bound::Float64, alpha_upper_bound::Float64,
                eta::Number_wrapper{Float64}, tau::Number_wrapper{Float64},
                gamma::Number_wrapper{Float64}, alpha_min::Number_wrapper{Float64},
@@ -1949,7 +1984,7 @@ function minrn(x::Float64, fx::Float64, w::Float64, fw::Float64, v::Float64,
     if abs(v - x) < eps || abs(w - x) < eps || abs(w - v) < eps
         return
     end
-    minimize_quadratic!(x, fx, w, fw, v, fv, u)
+    minimize_quadratic(x, fx, w, fw, v, fv, u)
     u.value = clamp(u.value, alpha_lower_bound, alpha_upper_bound)
     t1 = (u.value - x) * (u.value - v) * fw / (w - x) / (w - v)
     t2 = (u.value - w) * (u.value - v) * fx / (x - w) / (x - v)
@@ -1990,7 +2025,7 @@ end
 """
 Replaces the subroutine MINRM1
 """
-function minrm1(v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
+function minrm1(v0::AbstractArray{Float64}, v1::AbstractArray{Float64}, v2::AbstractArray{Float64},
                 m::Int64, sqnv0::Number_wrapper{Float64},
                 sqnv1::Number_wrapper{Float64}, sqnv2::Number_wrapper{Float64},
                 scv0v1::Number_wrapper{Float64}, scv0v2::Number_wrapper{Float64},
@@ -2033,8 +2068,8 @@ end
         """
 Replaces the subroutine MINRM
 """
-function minimize_v_polynomial(v0::Array{Float64}, v1::Array{Float64},
-                               v2::Array{Float64}, m::Int64,
+function minimize_v_polynomial(v0::AbstractArray{Float64}, v1::AbstractArray{Float64},
+                               v2::AbstractArray{Float64}, m::Int64,
                                alpha_lower_bound::Float64,
                                alpha_upper_bound::Float64,
                                xmin::Float64, x::Number_wrapper{Float64},
@@ -2153,7 +2188,7 @@ Replaces the subroutine CHOOSE
 
 """
 function choose(x1::Float64, x2::Float64, x3::Float64, xmin::Float64,
-                v0::Array{Float64}, v1::Array{Float64}, v2::Array{Float64},
+                v0::AbstractArray{Float64}, v1::AbstractArray{Float64}, v2::AbstractArray{Float64},
                 m::Int64, root1::Number_wrapper{Float64},
                 root2::Number_wrapper{Float64}, proot2::Number_wrapper{Float64})
     order = sort([x1, x2, x3])
@@ -2170,8 +2205,8 @@ end
 """
 Replaces the function POL4
 """
-function fourth_degree_pol(v0::Array{Float64}, v1::Array{Float64},
-                           v2::Array{Float64}, m::Int64, x::Float64)
+function fourth_degree_pol(v0::AbstractArray{Float64}, v1::AbstractArray{Float64},
+                           v2::AbstractArray{Float64}, m::Int64, x::Float64)
     s = 0.0
     p = 0.0
     for i = 1:m
@@ -2192,12 +2227,13 @@ end
 """
 Replaces the function psi
 """
-function psi(current_point::Array{Float64}, p::Array{Float64},
-             current_point_dim::Int64, alfk::Float64, next_point::Array{Float64},
-             next_residuals::Array{Float64}, number_of_residuals::Int64,
-             residuals!::Function, next_constraints::Array{Float64},
-             t::Int64, l::Int64, active_constraints::Array{Int64},
-             constraints!::Function, w::Array{Float64},
+function psi(current_point::AbstractArray{Float64}, p::AbstractArray{Float64},
+             current_point_dim::Int64, alfk::Float64,
+             next_point::AbstractArray{Float64},
+             next_residuals::AbstractArray{Float64}, number_of_residuals::Int64,
+             residuals!::Function, next_constraints::AbstractArray{Float64},
+             t::Int64, l::Int64, active_constraints::AbstractArray{Int64},
+             constraints!::Function, w::AbstractArray{Float64},
              ctrl::Number_wrapper{Int64})
     psi = 0.0 # what happens if we return without initialising psi
     for i = 1:current_point_dim
@@ -2239,11 +2275,11 @@ PERMIN(P, N) => p = [1:n]
 """
 Replaces the subroutine HESSF
 """
-function hessian_residuals(residuals!::Function, hessian::Array{Float64, 2},
-                           leading_dim_h::Int64, current_point::Array{Float64},
-                           number_of_parameters::Int64, v::Array{Float64},
-                           f1::Array{Float64}, f2::Array{Float64},
-                           number_of_residuals::Array{Float64},
+function hessian_residuals(residuals!::Function, hessian::AbstractArray{Float64, 2},
+                           leading_dim_h::Int64, current_point::AbstractArray{Float64},
+                           number_of_parameters::Int64, v::AbstractArray{Float64},
+                           f1::AbstractArray{Float64}, f2::AbstractArray{Float64},
+                           number_of_residuals::AbstractArray{Float64},
                            user_stop::Number_wrapper{Int64})
     user_stop.value = 0
     ctrl = Number_wrapper(-1)
@@ -2321,11 +2357,11 @@ end
 """
 Replaces the subroutine HESSH
 """
-function hessian_constraints(constraints!::Function, b::Array{Float64, 2},
-                             leading_dim_b::Int64, current_point::Array{Float64},
-                             current_point_dim::Int64, v::Array{Float64},
-                             active_constraints::Array{Float64}, t::Int64,
-                             f1::Array{Float64}, f2::Array{Float64}, m::Int64,
+function hessian_constraints(constraints!::Function, b::AbstractArray{Float64, 2},
+                             leading_dim_b::Int64, current_point::AbstractArray{Float64},
+                             current_point_dim::Int64, v::AbstractArray{Float64},
+                             active_constraints::AbstractArray{Float64}, t::Int64,
+                             f1::AbstractArray{Float64}, f2::AbstractArray{Float64}, m::Int64,
                              ier::Number_wrapper{Int64})
 
     ier.value = 0
@@ -2396,9 +2432,9 @@ end
 """
 Replaces the subroutine  PRESS
 """
-function f1_plus_c_times_f2_active(f1::Array{Float64},
-                                   active_constraints::Array{Int64}, t::Int64,
-                                   c::Float64, f2::Array{Float64})
+function f1_plus_c_times_f2_active(f1::AbstractArray{Float64},
+                                   active_constraints::AbstractArray{Int64}, t::Int64,
+                                   c::Float64, f2::AbstractArray{Float64})
     k = 0
     for i = 1:t
         k = active_constraints[i]
@@ -2409,8 +2445,8 @@ end
 """
 Replaces the subroutine PLUS
 """
-function f1_plus_c_times_f2(f1::Array{Float64}, c::Float64,
-                            f2::Array{Float64}, m::Int64)
+function f1_plus_c_times_f2(f1::AbstractArray{Float64}, c::Float64,
+                            f2::AbstractArray{Float64}, m::Int64)
     for i = 1:m
         f1[i] += c * f2[i]
     end
@@ -2421,17 +2457,17 @@ end
 Replaces the subroutine CHDER
 """
 function check_derivative(psi_derivative_at_zero::Float64, psi_at_zero::Float64,
-                          current_point::Array{Float64},
-                          search_direction::Array{Float64},
+                          current_point::AbstractArray{Float64},
+                          search_direction::AbstractArray{Float64},
                           number_of_residuals::Int64, current_point_dim::Int64,
-                          residuals!::Function, active_constraints::Array{Int64},
+                          residuals!::Function, active_constraints::AbstractArray{Int64},
                           number_of_active_constraints::Int64,
-                          penalty_weights::Array{Float64},
+                          penalty_weights::AbstractArray{Float64},
                           number_of_constraints::Int64, constraints!::Function,
                           number_of_eval::Number_wrapper{Int64},
-                          exit::Number_wrapper{Int64}, next_point::Array{Float64},
-                          next_residuals::Array{Float64},
-                          next_constraints::Array{Float64},
+                          exit::Number_wrapper{Int64}, next_point::AbstractArray{Float64},
+                          next_residuals::AbstractArray{Float64},
+                          next_constraints::AbstractArray{Float64},
                           alfk::Float64, psi_at_alfk::Float64,)
     ctrl = Number_wrapper(-1)
     psimk = psi(current_point ,search_direction ,current_point_dim, -alfk,
@@ -2463,7 +2499,7 @@ end
 Replaces the subroutine PREGN
 """
 
-function gn_previous_step(s::Array{Float64}, sn::Float64, b::Array{Float64},
+function gn_previous_step(s::AbstractArray{Float64}, sn::Float64, b::AbstractArray{Float64},
                           mindim::Int64, prank::Int64, dim::Number_wrapper{Int64})
     smax = 0.2
     rmin = 0.5
@@ -2485,7 +2521,7 @@ end
 """
 Replaces the subroutine PRESUB
 """
-function subspace_minimization(s::Array{Float64}, b::Array{Float64}, bn::Float64,
+function subspace_minimization(s::AbstractArray{Float64}, b::AbstractArray{Float64}, bn::Float64,
                                rabs::Float64, prank::Int64, km1rnk::Int64,
                                pgress::Float64, prelin::Float64, asprev::Float64,
                                alfkm1::Float64, dim::Number_wrapper{Int64})
@@ -2525,12 +2561,12 @@ end
 Replaces the subroutine JACDIF
 for residuals and constraints despite the name of the parameters
 """
-function jacobian_forward_diff(current_point::Array{Float64},
+function jacobian_forward_diff(current_point::AbstractArray{Float64},
                                current_point_dim::Int64,
-                               current_residuals::Array{Float64},
+                               current_residuals::AbstractArray{Float64},
                                number_of_residuals::Int64, residuals!::Function,
-                               jacobian::Array{Float64, 2},
-                               leading_dim_jacobian::Int64, w1::Array{Float64},
+                               jacobian::AbstractArray{Float64, 2},
+                               leading_dim_jacobian::Int64, w1::AbstractArray{Float64},
                                user_stop::Number_wrapper{Int64})
     delta = sqrt(eps(Float64))
     xtemp = 0.0
@@ -2556,7 +2592,8 @@ end
 """
 Replaces the subroutine LSOLVE
 """
-function lower_triangular_solve(n::Int64, a::Array{Float64, 2}, b::Array{Float64})
+function lower_triangular_solve(n::Int64, a::AbstractArray{Float64, 2},
+                                b::AbstractArray{Float64})
     sum = 0.0
     if n <= 0
         return
@@ -2580,7 +2617,7 @@ end
 Replaces the subroutine USOLVE
 puts the solution in b
 """
-function upper_triangular_solve(n::Int64, a::Array{Float64, 2}, b::Array{Float64})
+function upper_triangular_solve(n::Int64, a::AbstractArray{Float64, 2}, b::AbstractArray{Float64})
     s = 0.0
     nm = n - 1
     j = 0
@@ -2607,8 +2644,9 @@ end
 """
 Replaces the subroutine YCOMP
 """
-function d_minus_c1_times_x1(kp1::Int64, kq::Int64, d::Array{Float64},
-                             c1::Array{Float64, 2}, x1::Array{Float64})
+function d_minus_c1_times_x1(kp1::Int64, kq::Int64, d::AbstractArray{Float64},
+                             c1::AbstractArray{Float64, 2},
+                             x1::AbstractArray{Float64})
     sum = 0.0
     if kq <= 0 || kp1 <= 0
         return
@@ -2627,8 +2665,8 @@ end
 Replaces the subroutine JTRJ
 (maybe faster to just do g = g' *g but uses more memory)
 """
-function g_transpose_times_g(g::Array{Float64, 2}, n::Int64,
-                             work_area::Array{Float64})
+function g_transpose_times_g(g::AbstractArray{Float64, 2}, n::Int64,
+                             work_area::AbstractArray{Float64})
     sum = 0.0
     for j = 1:n
         for i = 1:n
@@ -2648,28 +2686,28 @@ end
 Replaces the subroutine NEWTON
 """
 function newton_search_direction(residuals!::Function, constraints!::Function,
-                                 current_point::Array{Float64},
-                                 number_of_parameters::Int64, c::Array{Float64},
+                                 current_point::AbstractArray{Float64},
+                                 number_of_parameters::Int64, c::AbstractArray{Float64},
                                  leading_dim_c::Int64, number_of_residuals::Int64,
                                  rank_c2::Int64,
-                                 current_residuals::Array{Float64},
-                                 p3::Array{Int64}, d3::Array{Float64},
-                                 estimated_lagrange_mult::Array{Float64},
-                                 a::Array{Float64, 2}, leading_dim_a::Int64,
-                                 active_constraints::Array{Int64},
+                                 current_residuals::AbstractArray{Float64},
+                                 p3::AbstractArray{Int64}, d3::AbstractArray{Float64},
+                                 estimated_lagrange_mult::AbstractArray{Float64},
+                                 a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
+                                 active_constraints::AbstractArray{Int64},
                                  number_of_active_constraints::Int64, rank_a::Int64,
-                                 d1::Array{Float64}, p1::Array{Int64},
-                                 p2::Array{Int64}, d2::Array{Float64},
-                                 b::Array{Float64},
-                                 current_constraints::Array{Float64},
+                                 d1::AbstractArray{Float64}, p1::AbstractArray{Int64},
+                                 p2::AbstractArray{Int64}, d2::AbstractArray{Float64},
+                                 b::AbstractArray{Float64},
+                                 current_constraints::AbstractArray{Float64},
                                  number_of_constraints::Int64,
-                                 leading_dim_fmat::Int64, pivot::Array{Float64},
-                                 gmat::Array{Float64, 2}, leading_dim_gmat::Int64,
-                                 search_direction::Array{Float64},
+                                 leading_dim_fmat::Int64, pivot::AbstractArray{Float64},
+                                 gmat::AbstractArray{Float64, 2}, leading_dim_gmat::Int64,
+                                 search_direction::AbstractArray{Float64},
                                  number_of_eval::Number_wrapper{Int64},
                                  error::Number_wrapper{Int64},
-                                 fmat::Array{Float64, 2}, d::Array{Float64},
-                                 v1::Array{Float64}, v2::Array{Float64})
+                                 fmat::AbstractArray{Float64, 2}, d::AbstractArray{Float64},
+                                 v1::AbstractArray{Float64}, v2::AbstractArray{Float64})
     tp1 = rank_a + 1
     nmt = n - t
     nmr = n - rank_a
@@ -2752,10 +2790,10 @@ end
 """
 Replaces the subroutine P3UTQ3
 """
-function p3utq3(p3::Array{Int64}, nmt::Int64, c2::Array{Float64 ,2},
-                leading_dim_c::Int64, d3::Array{Float64}, rank_c2::Int64,
-                c::Array{Float64, 2}, number_of_residuals::Int64, rank_a::Int64,
-                v2::Array{Float64})
+function p3utq3(p3::AbstractArray{Int64}, nmt::Int64, c2::AbstractArray{Float64 ,2},
+                leading_dim_c::Int64, d3::AbstractArray{Float64}, rank_c2::Int64,
+                c::AbstractArray{Float64, 2}, number_of_residuals::Int64, rank_a::Int64,
+                v2::AbstractArray{Float64})
     if rank_c2 > 0
         for i = 1:rank_c2
             @views householder_transform(2, i, i+1, number_of_residuals,
@@ -2782,7 +2820,7 @@ end
 Replaces the subroutine C2TC2
 """
 function c2tc2(c2::AbstractArray{Float64, 2}, rank_c2::Int64,
-               p3::Array{Int64}, nmt::Int64, v2::Array{Float64})
+               p3::AbstractArray{Int64}, nmt::Int64, v2::AbstractArray{Float64})
     k = 0
     if rank_c2 > 1
         for i = 2:rank_c2
@@ -2799,10 +2837,10 @@ end
 """
 Replaces the subroutine ECOMP
 """
-function ecomp(p2::Array{Int64}, a::Array{Float64 , 2}, leading_dim_a::Int64,
+function ecomp(p2::AbstractArray{Int64}, a::AbstractArray{Float64 , 2}, leading_dim_a::Int64,
                n::Int64,
-               d1::Array{Float64}, pivot::Array{Float64}, rank_a::Int64, t::Int64,
-               gmat::Array{Float64}, leading_dim_gmat)
+               d1::AbstractArray{Float64}, pivot::AbstractArray{Float64}, rank_a::Int64, t::Int64,
+               gmat::AbstractArray{Float64}, leading_dim_gmat)
     for i = 1:rank_a
         @views householder_transform(2, i, i+1, n, a[i:end, :], leading_dim_a,
                                      d1[i], gmat, leading_dim_g, 1, n, pivot[i])
@@ -2833,8 +2871,8 @@ end
 """
 Replaces the subroutine HSUM
 """
-function constraints_merit(active_constraints::Array{Int64}, t::Int64,
-                           h::Array{Float64}, w::Array{Float64}, l::Int64)
+function constraints_merit(active_constraints::AbstractArray{Int64}, t::Int64,
+                           h::AbstractArray{Float64}, w::AbstractArray{Float64}, l::Int64)
 
     sum = 0.0
     hval = 0.0
@@ -2856,8 +2894,8 @@ end
 -
 Replaces the subroutine UNSCR
 """
-function unscramble_array(active_constraints::Array{Int64}, bnd::Int64, l::Int64,
-                          p::Int64)
+function unscramble_array(active_constraints::AbstractArray{Int64}, bnd::Int64,
+                          l::Int64, p::Int64)
     lm = l - p
     if lmp <= 0
         return
@@ -2878,8 +2916,8 @@ end
 """
 Replaces the subroutine PREOBJ
 """
-function preobj(c::Array{Float64, 2}, m::Int64, rank_a::Int64, dx::Array{Float64},
-                f::Array{Float64}, t::Int64, fc1dy1::Number_wrapper{Float64},
+function preobj(c::AbstractArray{Float64, 2}, m::Int64, rank_a::Int64, dx::AbstractArray{Float64},
+                f::AbstractArray{Float64}, t::Int64, fc1dy1::Number_wrapper{Float64},
                 c1dy1::Number_wrapper{Float64})
     velem = 0.0
     fc1dy1.value = 0.0
@@ -2902,15 +2940,17 @@ end
 Replaces the subroutine NZESTM
 lm = lagrange multiplier
 """
-function nonzero_first_order_lm(a::Array{Float64}, rank_a::Int64,
+function nonzero_first_order_lm(a::AbstractArray{Float64, 2}, rank_a::Int64,
                                 number_of_active_constraints::Int64,
-                                b::Array{Float64}, v::Array{Float64},
-                                w::Array{Float64}, u::Array{Float64})
-    coptyto!(w, 1, b, 1, number_of_active_constraints)
+                                b::AbstractArray{Float64}, v::AbstractArray{Float64},
+                                w::AbstractArray{Float64}, u::AbstractArray{Float64})
+    copyto!(w, 1, b, 1, number_of_active_constraints)
     lower_triangular_solve(rank_a, a, w)
     solve_t_times_t(a, rank_a, w, u, number_of_active_constraints,
-                          Number_wrapper{Float64})
-    v .+= u
+                    Number_wrapper{Float64}(0.))
+    for i in number_of_active_constraints
+        v[i] += u[i]
+    end
 end
 
     
@@ -2918,16 +2958,18 @@ end
 """
 Replaces the subroutine LEAEST
 """
-function special_lagrange_mult(a::Array{Float64, 2},
-                                       number_of_active_constraints::Int64,
-                                       current_residuals::Array{Float64},
-                                       number_of_residuals::Array{Float64},
-                                       v1::Array{Float64},
-                                       c::Array{Float64, 2},
-                                       p1::Array{Int64},
-                                       scale::Int64,scaling_matrix::Array{Float64},
-                                       v2::Array{Float64}, v::Array{Float64},
-                                       lm_residual::Number_wrapper{Float64})
+function special_lagrange_mult(a::AbstractArray{Float64, 2},
+                               number_of_active_constraints::Int64,
+                               current_residuals::AbstractArray{Float64},
+                               number_of_residuals::Int64,
+                               v1::AbstractArray{Float64},
+                               c::AbstractArray{Float64, 2},
+                               p1::AbstractArray{Int64},
+                               scale::Int64,
+                               scaling_matrix::AbstractArray{Float64},
+                               v2::AbstractArray{Float64},
+                               v::AbstractArray{Float64},
+                               lm_residual::Number_wrapper{Float64})
 
     if number_of_active_constraints <= 0
         return
@@ -2940,9 +2982,9 @@ function special_lagrange_mult(a::Array{Float64, 2},
         end
         v2[j] = sum
     end
-    solve_t_times_t!(a, number_of_active_constraints, v2, v,
+    solve_t_times_t(a, number_of_active_constraints, v2, v,
                            number_of_active_constraints, lm_residual)
-    p_times_v(p=p1, m=number_of_active_constraints, v=v, n=1)
+    p_times_v(p1, number_of_active_constraints, v)
     if scale == 0
         return
     end
@@ -2953,13 +2995,13 @@ end
 """
 Replaces the subroutine EUCMOD
 """
-function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::Array{Float64},
+function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::AbstractArray{Float64},
                                  number_of_constraints::Int64,
-                                 positive_elements_l::Array{Int64},
+                                 positive_elements_l::AbstractArray{Int64},
                                  number_of_pos_elements_l::Int64,
-                                 y::Array{Float64}, tau::Float64,
-                                 new_penalty_constants::Array{Float64},
-                                 working_area::Array{Float64})
+                                 y::AbstractArray{Float64}, tau::Float64,
+                                 new_penalty_constants::AbstractArray{Float64},
+                                 working_area::AbstractArray{Float64})
     if number_of_pos_elements_l <= 0
         return
     end
@@ -3012,8 +3054,8 @@ end
 """
 Replaces the subroutine SACTH
 """
-function sum_sq_active_constraints(current_constraints::Array{Float64},
-                                   active_constraints::Array{Int64},
+function sum_sq_active_constraints(current_constraints::AbstractArray{Float64},
+                                   active_constraints::AbstractArray{Int64},
                                    number_of_active_constraints::Int64)
 
     sum = 0.0

@@ -29,8 +29,5 @@ function main()
     res = easy_nlcls(first_approx, number_of_residuals, residuals!, constraints!,
                number_of_equality_constraints, penalty_weights, current_residuals,
                current_constraints, active_constraints)
-    println(res)
-    println("found point :")
-    println(first_approx)
 end
 main()
