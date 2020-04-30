@@ -3,17 +3,18 @@ include("./dblredunls.jl")
 """
 Replaces the subroutine GIVEN1
 """
-function givens_rotation(z1::Float64, z2::Float64, c::Number_wrapper{Float64},
-                         s::Number_wrapper{Float64}, sig::AbstractArray{Float64})
+function givens_rotation(z1::Float64, z2::Float64)
     if z2 != 0.0
         gamma = sqrt(z1 ^ 2 + z ^ 2)
-        c.value = z1 / gamma
-        s.value = z2 / gamma
-        sig[1] = gamma
+        c = z1 / gamma
+        s = z2 / gamma
+        sig = gamma
+        return c, s, sig
     end
-    c.value = copysign(1.0, z1)
-    s.value = 0.0
-    sig[1] = abs(z1)
+    c = copysign(1.0, z1)
+    s = 0.0
+    sig = abs(z1)
+    return c, s, sig
 end
 
 """
@@ -178,7 +179,6 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
                      number_of_active_constraints, min_l_n, p_norm,
                      inactive_constraints, lmt, penalty_weights,
                      old_penalty_weights, exit, wsave)
-    @printf("After init working set exit.value = %d\n", exit.value)
     if exit.value < 0
         return
     end
@@ -238,7 +238,7 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
                  number_of_parameters, b, scaling_matrix)
     current_point_norm = norm(current_point)
     current_objective.value = 0.5 * fsum.value
-
+    println(number_of_active_constraints)
     update_active_constraints(a, leading_dim_a, number_of_active_constraints,
                               number_of_equality_constraints.value,
                               number_of_parameters, g, b, tau, leading_dim_f,
@@ -352,7 +352,7 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
     end
     number_of_eval.value += eval.value
     number_of_linesearch_eval.value += eval.value
-
+    println("evrest")
     evaluation_restart(current_point, u, number_of_parameters,
                        number_of_residuals, iteration_number, residuals!,
                        number_of_eval, current_residuals, d1_norm.value,
@@ -371,7 +371,7 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
     if restart.value || error.value == -1 || error.value == -5
         @goto iteration_loop
     end
-
+    println("move cons")
     move_violated_constraints(current_constraints, active_constraints,
                               number_of_active_constraints, min_l_n,
                               number_of_equality_constraints.value,
@@ -1268,39 +1268,47 @@ end
 """
 Replaces the subroutine MULEST
 """
-function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Float64, 2},
+function estimate_lagrange_mult(time::Number_wrapper{Int64},
+                                a::AbstractArray{Float64, 2},
                                 leading_dim_a::Int64,
                                 number_of_active_constraints::Int64,
                                 number_of_parameters::Int64,
-                                gradient::AbstractArray{Float64}, bv::AbstractArray{Float64},
+                                gradient::AbstractArray{Float64},
+                                bv::AbstractArray{Float64},
                                 deleted_column::Int64, tol::Float64,
-                                d1::AbstractArray{Float64}, h::AbstractArray{Float64, 2},
-                                leading_dim_h::Int64, pivot::AbstractArray{Float64},
+                                d1::AbstractArray{Float64},
+                                h::AbstractArray{Float64, 2},
+                                leading_dim_h::Int64,
+                                pivot::AbstractArray{Float64},
                                 p::AbstractArray{Int64}, scale::Int64,
                                 scaling_matrix::AbstractArray{Float64},
                                 lagrange_mult::AbstractArray{Float64},
                                 rank_a::Number_wrapper{Int64},
                                 residu::Number_wrapper{Float64},
-                                s::AbstractArray{Float64}, u::AbstractArray{Float64},
+                                s::AbstractArray{Float64},
+                                u::AbstractArray{Float64},
                                 w::AbstractArray{Float64})
+    println("number of active constraints begining of mulest, ",
+            number_of_active_constraints)
+
     ctrl = time.value
     time.value += 1
     rank_a.value = number_of_active_constraints
     residu.value = 0
     k1 = 0
     k2 = 0
-    co = Number_wrapper{Float64}(0.)
-    si = Number_wrapper{Float64}(0.)
     #both eta and com1 are used in the original code without being
     #initialized so i don't know what value to start them at
-    eta = 0.
-    com1 = 0.
+    co = 0.
+    si = 0.
+    eta = Number_wrapper(0.)
+    com1 = Number_wrapper(0.)
     if ctrl >= 2
         @goto compute_givens_rotations
     end
     #100
     if number_of_active_constraints == 0
-        residu.value = norm(g)
+        residu.value = BLAS.nrm2(number_of_parameters, g, 1)
         return
     end
     a_to_lower_triangular(number_of_active_constraints, number_of_parameters,
@@ -1334,13 +1342,13 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Fl
            h[i, i] = 1.0
         end
     end
-    tp1 = number_of_parameters + 1
+    tp1 = number_of_active_constraints + 1
     if deleted_column == tp1
         @goto choose_pseudo_rank
     end
     pi = eps(Float64)
     ist = deleted_column
-    for i = delete_column:number_of_active_constraints
+    for i = deleted_column:number_of_active_constraints
         ip1 = i + 1
         k1 = i
         k2 = i
@@ -1350,7 +1358,7 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Fl
         if ip1 > deleted_column
             k2 += 1
         end
-        givens_rotation(a[k1, i], a[k2, 1], co, si, view(a, i, i))
+        co, si, a[i,i] = givens_rotation(a[k1, i], a[k2, ip1])
         if ip1 <= number_of_active_constraints
             for k = ip1:number_of_active_constraints
                 k1 = k
@@ -1361,15 +1369,15 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Fl
                 if ip1 > deleted_column
                     k2 += 1
                 end
-                if si.value != 0.0
-                    apply_rotation(co.value, si.value, view(a, k1, i),
+                if si != 0.0
+                    apply_rotation(co, si, view(a, k1, i),
                                    view(a, k2, ip1))
                 end
                 a[k, i] = a[k1, i]
             end
         end
 
-        if si.value == 0.0
+        if si == 0.0
             #eta = ???
             u[i] = eta.value
             w[i] = -com1.value / eta.value
@@ -1379,21 +1387,21 @@ function estimate_lagrange_mult(time::Number_wrapper{Int64}, a::AbstractArray{Fl
                 continue
             end
         end
-        apply_rotation(co.value, si.value, view(gradient, i), view(gradient, ip1))
+        apply_rotation(co, si, view(gradient, i), view(gradient, ip1))
 
-        s[i] = si.value
+        s[i] = si
         if i <= ist
-            u[i] = co.value / pi
+            u[i] = co / pi
             w[i] = pi
-            eta.value = si.value / pi
-            com1.value = co.value
+            eta.value = si / pi
+            com1.value = co
             continue
         end
         #240
-        u[i] = co.value * eta.value
+        u[i] = co * eta.value
         w[i] = -com1.value / eta.value
-        eta.value *= si.value
-        com1.value = co.value
+        eta.value *= si
+        com1.value = co
     end #250
 
     u[tp1] = eta.value
@@ -1450,7 +1458,7 @@ function compute_penalty_weights(penalty_weights::AbstractArray{Float64},
                                  next_constraints::AbstractArray{Float64},
                                  v2::AbstractArray{Float64},
                          wsave::AbstractArray{Float64, 2})
-
+    println("SIZE WSAVE", size(wsave))
     delta = 0.25
     if restart_in_old
         copyto!(penalty_weights, 1, old_penalty_weights, 1, number_of_constraints)
@@ -1551,7 +1559,8 @@ end
 Replaces the subroutine WRKSET
 in the dblwrkset.f file
 """
-function update_active_constraints(a::AbstractArray{Float64, 2}, leading_dim_a::Int64,
+function update_active_constraints(a::AbstractArray{Float64, 2},
+                                   leading_dim_a::Int64,
                                    (number_of_active_constraints::
                                     Number_wrapper{Int64}),
                                    number_of_equality_constraints::Int64,
@@ -1578,9 +1587,11 @@ function update_active_constraints(a::AbstractArray{Float64, 2}, leading_dim_a::
                                    constraints!::Function, residuals!::Function,
                                    number_of_eval::Number_wrapper{Int64},
                                    number_of_jac_eval::Number_wrapper{Int64},
-                                   p2::AbstractArray{Int64}, p3::AbstractArray{Int64},
+                                   p2::AbstractArray{Int64},
+                                   p3::AbstractArray{Int64},
                                    gn_search_direction::AbstractArray{Float64},
-                                   v1::AbstractArray{Float64}, d2::AbstractArray{Float64},
+                                   v1::AbstractArray{Float64},
+                                   d2::AbstractArray{Float64},
                                    d3::AbstractArray{Float64},
                                    rank_c2::Number_wrapper{Int64},
                                    d1_norm::Number_wrapper{Float64},
@@ -1686,7 +1697,8 @@ function update_active_constraints(a::AbstractArray{Float64, 2}, leading_dim_a::
         deleted_constraints_plus2.value = 1
         estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                                 number_of_active_constraints.value,
-                                number_of_parameters, minus_current_constraints,
+                               number_of_parameters, gradient_objective,
+                               minus_current_constraints,
                                 j.value, tol, d1, fmat, leading_dim_fmat,
                                 pivot, p1, scale, scaling_matrix, v, rank_a,
                                 gres, s, u, v2)
@@ -1722,15 +1734,17 @@ function update_active_constraints(a::AbstractArray{Float64, 2}, leading_dim_a::
     end
     del = true
     reorder(a, number_of_active_constraints, number_of_parameters,
-            minus_current_constraints, j.value, noeq.value, active_constraints,
+            minus_active_constraints, j.value, noeq.value, active_constraints,
             inactive_constraints, number_of_inactive_constraints, p4, u, scale,
             scaling_matrix)
     estimate_lagrange_mult(deleted_constraints_plus2, a, leading_dim_a,
                             number_of_active_constraints.value,
-                            number_of_parameters, minus_current_constraints,
+                           number_of_parameters, gradient_objective,
+                           minus_active_constraints,
                             j.value, tol, d1, fmat, leading_dim_fmat,
                             pivot, p1, scale, scaling_matrix, v, rank_a,
                             gres, s, u, v2)
+    user_stop.value = 2
     residuals!(current_point, number_of_parameters, current_residuals,
                number_of_residuals, user_stop, jac_residuals,
                leading_dim_jac_residuals)

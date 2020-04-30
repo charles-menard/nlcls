@@ -1,6 +1,6 @@
 #This file contains the struct used to mimic the effect the different
-
 import Base.==
+import Base.show
 """
 Replaces the common block PREC
 """
@@ -54,6 +54,34 @@ struct Nlcls_scalars
     rank_ac::Int64
     objective_at_termination::Float64
     convergence_factor::Float64
+end
+
+function show(io::IO, s::Nlcls_scalars)
+    s = string("At the final point",
+         "\nThe number of active constraints is ",
+         s.number_of_active_constraints,
+         "\nThe exit code is ",
+         s.exit,
+         "\nThe number of iterations is ",
+         s.number_of_iterations,
+         "\nThe number of function evaluations is ",
+         s.number_of_eval,
+         "\nThe number of evaluations of the Jacobian is ",
+         s.number_of_jac_eval,
+         "\nThe number of function evaluations due to the hessian is ",
+         s.number_of_hessian_eval,
+        "\nThe number of function evaluations due to line-search is ",
+         s.number_of_linesearch_eval,
+        "\nThe pseudo-rank of the constraint matrix is ",
+         s.rank_a,
+        "\nThe pseudo-rank of the compound matrix A;C is ",
+         s.rank_ac,
+        "\nThe objective function is ",
+         s.objective_at_termination,
+         "\nThe convergence factor is ",
+         s.convergence_factor)
+    println(io, s)
+    return
 end
 
 #######

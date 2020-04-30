@@ -9,6 +9,34 @@ function constraints!(x, h)
     h[6] = -x[2] + 4.5
     h[7] = -x[3] + 5.0
 end
+function jacobian_constraints!(x, jh)
+    jh[1,1] = -2. * x[1]
+    jh[1,2] = -2. * x[2]
+    jh[1,3] = -2. * x[3]
+    for i = 2:7
+        for j = 2:3
+            jh[i,j] = 0.
+        end
+    end
+    jh[2,1] = 1.
+    jh[3,2] = 1.
+    jh[4,3] = 1.
+    jh[5,1] = -1.
+    jh[6,2] = -1.
+    jh[7,3] = -1.
+end
+
+function jacobian_residuals!(x, jf)
+    jf[1,1] = 1.
+    jf[1,2] = -1.
+    jf[1,3] = 0.
+    jf[2,1] = 1. / 3.
+    jf[2,2] = 1. / 3.
+    jf[2,3] = 0.
+    jf[3,1] = 0.
+    jf[3,2] = 0.
+    jf[3,3] = 1.
+end
 
 function residuals!(x, f)
     f[1] = x[1] - x[2]
@@ -26,8 +54,10 @@ function main()
     current_constraints = Array{Float64}(undef, 7)
     active_constraints = Array{Int64}(undef, 10)
     
-    res = easy_nlcls(first_approx, number_of_residuals, residuals!, constraints!,
+    res = easy_nlcls!(first_approx, number_of_residuals, residuals!, constraints!,
                number_of_equality_constraints, penalty_weights, current_residuals,
-               current_constraints, active_constraints)
+                     current_constraints, active_constraints, jacobian_residuals!,
+                     jacobian_constraints!)
+    show(res)
 end
 main()

@@ -9,9 +9,11 @@ respectively in `jac_constraints` and `jac_residuals`
 
 """
 
-function new_point(current_point::AbstractArray{Float64}, number_of_parameters::Int,
+function new_point(current_point::AbstractArray{Float64},
+                   number_of_parameters::Int,
                    current_constraints::AbstractArray{Float64},
-                   number_of_constraints::Int, current_residuals::AbstractArray{Float64},
+                   number_of_constraints::Int,
+                   current_residuals::AbstractArray{Float64},
                    number_of_residuals::Int, constraints!::Function,
                    residuals!::Function, leading_dim_jac_constraints::Int,
                    leading_dim_jac_residuals::Int,
@@ -146,14 +148,18 @@ Replaces the subroutine GNSRCH
 """
 function gn_search(fmat_is_identity::Int, a::AbstractArray{Float64,2},
                   leading_dim_a::Int, number_of_active_constraints::Int,
-                  number_of_parameters::Int, d1::AbstractArray{Float64}, p1::AbstractArray{Int},
-                  rank_a::Int, number_of_householder::Int, b::AbstractArray{Float64},
+                   number_of_parameters::Int, d1::AbstractArray{Float64},
+                   p1::AbstractArray{Int},
+                   rank_a::Int, number_of_householder::Int,
+                   b::AbstractArray{Float64},
                   fmat::AbstractArray{Float64,2}, leading_dim_f::Int,
                   jac_residuals::AbstractArray{Float64,2},
                   leading_dim_jac_residuals::Int, number_of_residuals::Int64,
-                  current_residuals::AbstractArray{Float64},pivot::AbstractArray{Float64},
+                   current_residuals::AbstractArray{Float64},
+                   pivot::AbstractArray{Float64},
                   tau::Float64, leading_dim_g::Int, scale::Int,
-                  diag::AbstractArray{Float64}, inactive_constraints::AbstractArray{Int},
+                   diag::AbstractArray{Float64},
+                   inactive_constraints::AbstractArray{Int},
                   number_of_inactive_constraints::Int, p4::AbstractArray{Int64},
                   p2::AbstractArray{Int}, p3::AbstractArray{Int},
                   gn_direction::AbstractArray{Float64}, v1::AbstractArray{Float64},
@@ -161,7 +167,8 @@ function gn_search(fmat_is_identity::Int, a::AbstractArray{Float64,2},
                   rank_c2::Number_wrapper{Int}, d1_norm::Number_wrapper{Float64},
                   d_norm::Number_wrapper{Float64},
                   b1_norm::Number_wrapper{Float64}, d::AbstractArray{Float64},
-                  work_area_s::AbstractArray{Float64}, work_area_u::AbstractArray{Float64},
+                   work_area_s::AbstractArray{Float64},
+                   work_area_u::AbstractArray{Float64},
                   gmat::AbstractArray{Float64,2})
 
 
@@ -801,11 +808,13 @@ Replaces the subroutine ADX
 function search_direction_product(code::Int64, gmat::AbstractArray{Float64, 2},
                                   leading_dim_g::Int64,
                                   rank_a::Int64, number_of_non_zero_in_b::Int64,
-                                  p1::AbstractArray{Int64}, d2::AbstractArray{Float64},
+                                  p1::AbstractArray{Int64},
+                                  d2::AbstractArray{Float64},
                                   b::AbstractArray{Float64},
                                   number_of_active_constraints::Int64,
                                   number_of_householder::Int64,
-                                  scale::Int64, scaling_matrix::AbstractArray{Float64},
+                                  scale::Int64,
+                                  scaling_matrix::AbstractArray{Float64},
                                   product::AbstractArray{Float64},
                                   work_area::AbstractArray{Float64})
     k = 0
@@ -820,10 +829,10 @@ function search_direction_product(code::Int64, gmat::AbstractArray{Float64, 2},
         for i = 1:rank_a
             k = rank_a + 1 - i
             @views householder_transform(2, k, k+1, number_of_active_constraints,
-                                  gmat[:, k:number_of_parameters], 1,
-                                  d2[k], product,
+                                  gmat[:, k:end], 1,
+                                  d2[k:end], product,
                                   1, number_of_active_constraints, 1,
-                                  gmat[k, k])
+                                  gmat[k:end, k:end])
         end
     end
     if number_of_active_constraints < number_of_householder
@@ -847,9 +856,11 @@ function l_to_upper_triangular(a::AbstractArray{Float64, 2}, leading_dim_a::Int6
                                rank_a::Int64, number_of_parameters::Int64,
                                b::AbstractArray{Float64}, leading_dim_g::Int64,
                                p2::AbstractArray{Int64},
-                               gmat::AbstractArray{Float64,2}, d2::AbstractArray{Float64})
-
-    p2[1:rank_a] = [1:rank_a]
+                               gmat::AbstractArray{Float64,2},
+                               d2::AbstractArray{Float64})
+    for i in 1:rank_a
+        p2[i] = i
+    end
     for i=1:number_of_parameters
         for j=1:rank_a
             if i < j
@@ -859,21 +870,21 @@ function l_to_upper_triangular(a::AbstractArray{Float64, 2}, leading_dim_a::Int6
             end
         end
     end
-    cmax = Number_wrapper{Int64}(0)
-    collng  = Number_wrapper{Float64}(0.)
+    cmax = 0
+    collng = 0.0
     for i=1:rank_a
-        max_partial_row_norm(number_of_parameters, rank_a, gmat, leading_dim_g,
-                             i, i, cmax, collng)
+        cmax, collng = max_partial_col_norm(number_of_parameters, rank_a, gmat,
+                             i, i)
         p2[i] = cmax
-        permute_columns(gmat, leading_dim_g, number_of_parameters, i, cmax.value)
+        permute_columns(gmat, number_of_parameters, i, cmax)
         @views householder_transform(1, i, i+1, number_of_parameters,
                               gmat[:, i:number_of_parameters],
-                              1, d2[i], gmat[:, i+1:end], 1,
-                              leading_dim_g, rank_a-i, gmat[i, i])
+                              1, d2[i:end], gmat[:, i+1:end], 1,
+                              leading_dim_g, rank_a-i, gmat[i:end, i:end])
         @views householder_transform(2, i, i+1, number_of_parameters,
                               gmat[ :, i:number_of_parameters],
-                              1, d2[i], b, 1, number_of_parameters, 1,
-                              gmat[i, i])
+                              1, d2[i:end], b, 1, number_of_parameters, 1,
+                              gmat[i:end, i:end])
     end
     return
 
@@ -897,17 +908,17 @@ function a_to_lower_triangular(number_of_rows_a::Int64, length_g::Int64,
         p1[i] = i
     end
     krank = 0
-    imax = Number_wrapper{Int64}(0)
-    rmax  = Number_wrapper{Float64}(0.)
+    imax = 0
+    rmax  = 0.
     for i = 1:ldiag
         krank = i
-        max_partial_row_norm(number_of_rows_a, length_g, a,
-                             i, i, imax, rmax)
-        if rmax.value >= tol
+        imax, rmax = max_partial_row_norm(number_of_rows_a, length_g, a,
+                             i, i)
+        if rmax >= tol
             break
         end
-        p1[i] = imax.value
-        permute_row(a, leading_dim_a, length_g, i, imax.value)
+        p1[i] = imax
+        permute_row(a, leading_dim_a, length_g, i, imax)
         @views householder_transform(1, i, i+1, length_g, a[i:end, :],
                                      leading_dim_a,
                                      d1[i], a[i+1:end, :], leading_dim_a, 1,
@@ -935,21 +946,25 @@ function c2_to_upper_triangular(number_of_rows_c2::Int64, number_of_col_c2::Int6
     if number_of_col_c2 == 0 || number_of_rows_c2 == 0
         return
     end
-    p3 = [1:number_of_col_c2]
+    for i = 1:number_of_col_c2
+        p3[i] = i
+    end
+
     ldiag = pseudo_rank_c2.value
-    kmax = Number_wrapper{Int64}(0)
-    rmax  = Number_wrapper{Float64}(0.)
+    kmax = 0
+    rmax = 0.
     for k = 1:ldiag
-        max_partial_row_norm(number_of_rows_c2, number_of_col_c2, c2,
-                             leading_dim_c2, k, k, kmax, rmax)
-        permute_columns(c2, leading_dim_c2, number_of_rows_c2, k, kmax.value)
+        kmax, rmax = max_partial_col_norm(number_of_rows_c2, number_of_col_c2, c2,
+                             k, k)
+        println("kmax = ", kmax)
+        permute_columns(c2, number_of_rows_c2, k, kmax)
         #linear indexing on the parameter c of householder_transform
         #
         @views householder_transform(1, k, k+1, number_of_rows_c2, c2[:, k:end],
-                                1, d3[k], c2[:, k+1:end], 1, leading_dim_c,
-                                number_of_col_c2-k, c2[k, k])
+                                1, d3[k:end], c2[:, k+1:end], 1, leading_dim_c2,
+                                number_of_col_c2-k, c2[k:end, k:end])
       end
-      krank = 0
+    krank = 0
     u_11 = abs(c2[1, 1])
     for k = 1:ldiag
         if abs(c2[k, k]) <= tol*u_11
@@ -957,14 +972,6 @@ function c2_to_upper_triangular(number_of_rows_c2::Int64, number_of_col_c2::Int6
         end
     end
     pseudo_rank_c2.value = krank
-
-    sum = 0.0
-    for i = 1:number_of_rows_c
-        for j = 1:number_of_col_c1
-            sum += c1[i,j] * b1[k]
-        end
-        product[i] += sum
-    end
 end
 """
 Replaces the subroutine CDX
@@ -1004,35 +1011,36 @@ end
 Replaces subroutine ROWMAX
 """
 function max_partial_row_norm(m::Int64, n::Int64, a::AbstractArray{Float64, 2},
-                              starting_col::Int64,starting_row::Int64,
-                              max_row_index::Number_wrapper{Int64},
-                              max_row_norm::Number_wrapper{Float64})
+                              starting_col::Int64,starting_row::Int64)
 
-    max_row_norm.value = -1.0
+    max_row_norm = -1.0
+    max_row_index = 0
     for i = starting_row:m
         @views row_norm = norm(a[i, starting_col:n])
-        if row_norm > max_row_norm.value
-            max_row_norm.value = row_norm
-            max_row_index.value = i
+        if row_norm > max_row_norm
+            max_row_norm = row_norm
+            max_row_index = i
         end
     end
+    return max_row_index, max_row_norm
 end
 """
 Replaces de subroutine COLMAX
 """
-function max_partial_row_norm(m::Int64, n::Int64, a::AbstractArray{Float64, 2},
-                              starting_col::Int64, starting_row::Int64,
-                              max_col_index::Number_wrapper{Int64},
-                              max_col_norm::Number_wrapper{Float64})
+function max_partial_col_norm(m::Int64, n::Int64, a::AbstractArray{Float64, 2},
+                              starting_col::Int64, starting_row::Int64)
 
-    max_col_norm.value = -1.0
+    max_col_norm = -1.0
+    max_col_index = 0
+    col_norm = 0.0
     for j = starting_col:n
-        col_norm = norm(a[starting_row:m, j])
-        if col_norm > max_col_norm.value
-            max_col_norm.value = col_norm
-            max_col_index.value = j
+        @views col_norm = norm(a[starting_row:m, j])
+        if col_norm > max_col_norm
+            max_col_norm = col_norm
+            max_col_index = j
         end
     end
+    return max_col_index, max_col_norm
 end
 """
 Replaces subroutine PRMROW 
@@ -1376,7 +1384,7 @@ function sign_ch(time::Int64, p1::AbstractArray{Int64},
         return
     end
     k = active_constraints[s.value]
-    i = bnd + k.value - kp
+    i = bnd + k - kp
     if (active_constraints[i] != 1 &&
         iteration_number - active_constraints[i] < ival &&
         betkm1 > tau * gnd_norm)
@@ -1384,7 +1392,7 @@ function sign_ch(time::Int64, p1::AbstractArray{Int64},
     end
     active_constraints[i] = -1
     if betkm1 <= tau * gnd_norm
-        unscramble_constraints(active_constraints, bnd, l, kp)
+        unscramble_array(active_constraints, bnd, l, kp)
     end
     if time < 3
         for i = 1:t
@@ -1392,10 +1400,10 @@ function sign_ch(time::Int64, p1::AbstractArray{Int64},
         end
         p_times_v(p1, t, p2)
         for i = 1:t
-            p1[i] = Int64(p2[i]) 
+            p1[i] = trunc(Int64, p2[i])
         end
     end
-    j.value = p1[s]
+    j.value = p1[s.value]
     tm1 = t - 1
     if tm1 < 1
         return
@@ -1409,17 +1417,17 @@ function sign_ch(time::Int64, p1::AbstractArray{Int64},
             p2[i] = i - 1 + 0.1
         end
     end
-    permute(n=t, p=p1, w=p2, f=working_area)
+    permute(t, p1, p2, working_area)
     for i = 1:t
-        p1[i] = Int64(working_area[i])
+        p1[i] = trunc(Int64, working_area[i])
         if p1[i] == 0
-            k.value = i
+            k = i
         end
     end
-    if k.value == t
+    if k == t
         return
     end
-    for i = k.value:tm1
+    for i = k:tm1
         p1[i] = p1[i + 1]
     end
 end
@@ -1433,11 +1441,12 @@ function reorder(a::AbstractArray{Float64, 2},
                  active_constraints::AbstractArray{Int64},
                  inactive_constraints::AbstractArray{Int64},
                  number_of_inactive_constraints::Number_wrapper{Int64},
-                 p4::AbstractArray{Int64}, working_area::AbstractArray{Float64},scale::Int64,
+                 p4::AbstractArray{Int64}, working_area::AbstractArray{Float64},
+                 scale::Int64,
                  scaling_matrix::AbstractArray{Float64})
 
     tm1 = number_of_active_constraints.value - 1
-    if row_of_l_to_delete != t
+    if row_of_l_to_delete != number_of_active_constraints
         for i = 1:row_of_l_to_delete
             working_area = a[row_of_l_to_delete:i]
         end
@@ -2896,7 +2905,7 @@ Replaces the subroutine UNSCR
 """
 function unscramble_array(active_constraints::AbstractArray{Int64}, bnd::Int64,
                           l::Int64, p::Int64)
-    lm = l - p
+    lmp = l - p
     if lmp <= 0
         return
     end
@@ -2995,23 +3004,23 @@ end
 """
 Replaces the subroutine EUCMOD
 """
-function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::AbstractArray{Float64},
+function minimize_euclidean_norm(ctrl::Int64,
+                                 penalty_constants::AbstractArray{Float64},
                                  number_of_constraints::Int64,
                                  positive_elements_l::AbstractArray{Int64},
                                  number_of_pos_elements_l::Int64,
                                  y::AbstractArray{Float64}, tau::Float64,
-                                 new_penalty_constants::AbstractArray{Float64},
                                  working_area::AbstractArray{Float64})
     if number_of_pos_elements_l <= 0
         return
     end
-    copyto!(working_area, 1, working_area, 1, number_of_constraints)
-    @views y_norm = norm(y[1:number_of_constraints])
+    copyto!(working_area, 1, penalty_constants, 1, number_of_constraints)
+    y_norm = BLAS.nrm2(number_of_pos_elements_l, y, 1)
     y_norm_sq = y_norm ^ 2
-    scale_vector(y, y_norm, 1, number_of_constraints)
+    scale_vector(y, y_norm, 1, number_of_pos_elements_l)
     tau_new = tau
     sum = 0.0
-    nrunch = number_of_constants
+    nrunch = number_of_pos_elements_l
     istop = 0
     constant = 0.0
     k = 0
@@ -3029,15 +3038,15 @@ function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::AbstractArr
         istop = nrunch
         k = 1
         while k <= nrunch
-            i = positive_element_l[k]
+            i = positive_elements_l[k]
             prod = constant * y[k] * y_norm
             if prod >= working_area[i]
-                old_penalty_constants[i] = prod
+                penalty_constants[i] = prod
                 y_norm_sq += y[k] ^ 2
                 k += 1
                 continue
             end
-            sum += old_penalty_constant[i] * y[k] * y_norm
+            sum += penalty_constants[i] * y[k] * y_norm
             for j = k:nrunch
                 positive_elements_l[j] = positive_elements_l[j+1]
                 y[j] = y[j+1]
@@ -3046,7 +3055,7 @@ function minimize_euclidean_norm(ctrl::Int64, old_penalty_constants::AbstractArr
         end
         y_norm_sq *= y_norm ^ 2
         if nrunch <= 0 || ctrl == 2 || istop == nrunch
-            break
+            return
         end
     end
 end

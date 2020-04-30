@@ -1,5 +1,24 @@
 include("./struct.jl")
 include("./dblmod2nls.jl")
+function easy_nlcls!(first_approximation::Array{Float64},
+                    number_of_residuals::Int64, number_of_constraints::Int64,
+                    number_of_equality_constraints::Int64,
+                    residuals!::Function, constraints!::Function,
+                    jac_residuals!::Function, jac_constraints!::Function)
+    rpc = number_of_residuals + number_of_constraints
+    act = min(2 * number_of_constraints,
+              number_of_constraints + length(first_approximation))
+    penalty_weights = Array{Float64}(undef, number_of_constraints)
+    current_residuals = Array{Float64}(undef, rpc)
+    current_constraints = Array{Float64}(undef, number_of_constraints)
+    active_constraints = Array{Int64}(undef, act)
+    res = easy_nlcls(first_approximation, number_of_residuals, residuals!,
+                     constraints!, number_of_equality_constraints,
+                     penalty_weights, current_residuals, current_constraints,
+                     active_constraints, jac_residuals, jac_constraints)
+    return res
+end
+    
 """
 Easy to call version of NLSIP
 residuals!(x, f) and constraints!(x, h) must compute the
@@ -14,7 +33,7 @@ residuals/constraints at x and return the result in f/ h
                                  number_of_constraints + number_of_parameters)
     
 """
-function easy_nlcls(first_approximation::Array{Float64},
+function easy_nlcls!(first_approximation::Array{Float64},
                     number_of_residuals::Int64,
                     residuals!::Function,
                     constraints!::Function,
