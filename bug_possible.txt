@@ -10,3 +10,4 @@ EN JULIA DEBUT:INC:FIN
 
 - certaines fonctions demande b de taille min(l, n) d<autre de taille l
 est-ce que dans les cas taille l ca debord sur d1???
+- reverifier confusion possible entre add, del et time constraints_added deleted etc

@@ -441,8 +441,14 @@ function sub_search_direction(deleted_constraints::Int64,
                           d, v1)
     if nmt > 0
         copyto!(search_direction, rank_a+1, d, 1, nmt - 1)
-        upper_triangular_solve(leading_dim_c, view(c, :, k:number_of_parameters),
-                               view(search_direction, k:number_of_parameters))
+        println("LEADING DIM C, K, SIZE C, LEN SD")
+        println(leading_dim_c)
+        println(k)
+        println(size(c))
+        println(length(search_direction))
+        @views upper_triangular_solve(leading_dim_c,
+                                      c[:, k:end],
+                               search_direction[k:end])
         if dim_c2 != nmt
             k = dim_c2 + 1
             for i = k:nmt
@@ -461,20 +467,21 @@ function sub_search_direction(deleted_constraints::Int64,
                   work_area)
     end
 
-    no::Int64 = number_of_householder - length(b)
+    no::Int64 = number_of_householder - number_of_active_constraints
     irow::Int64 = 0
     i2::Int64 = 0
     i3::Int64 = 0
     no_elem::Int64 = 0
     ait_search_direction::Float64 = 0.0
     if no > 0
-        irow = length(b) + 1
+        irow = numer_of_active_constraints + 1
         i2 = inactive_constraints[number_of_inactive_constraints]
         no_elem = p4[i2]
         for j=1:no_elem
             ait_search_direction += a[irow, j] * search_direction[j]
         end
-        i3 = length(current_residuals) + length(inactive_constraints) + length(b)
+        i3 = (number_of_residuals + number_of_inactive_constraints +
+              number_of_active_constraints)
         v1[i3] = ait_search_direction
         if scale != 0
             v1[i3] /= scaling_matrix[irow]
@@ -956,7 +963,6 @@ function c2_to_upper_triangular(number_of_rows_c2::Int64, number_of_col_c2::Int6
     for k = 1:ldiag
         kmax, rmax = max_partial_col_norm(number_of_rows_c2, number_of_col_c2, c2,
                              k, k)
-        println("kmax = ", kmax)
         permute_columns(c2, number_of_rows_c2, k, kmax)
         #linear indexing on the parameter c of householder_transform
         #
@@ -3026,6 +3032,7 @@ function minimize_euclidean_norm(ctrl::Int64,
     k = 0
     i = 0
     prod = 0.0
+    println("nrunch before loop ", nrunch)
     while true
         tau_new -= sum
         if y_norm_sq == 0.0
@@ -3048,6 +3055,7 @@ function minimize_euclidean_norm(ctrl::Int64,
             end
             sum += penalty_constants[i] * y[k] * y_norm
             for j = k:nrunch
+                println("j ===========", j)
                 positive_elements_l[j] = positive_elements_l[j+1]
                 y[j] = y[j+1]
             end

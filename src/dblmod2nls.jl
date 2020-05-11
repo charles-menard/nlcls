@@ -347,12 +347,12 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
                        upper_bound_steplength,
                        number_of_eval, x_diff, error, index_upper_bound, wh_norm,
                        d, v2, s, g, ltp, restart_steps, wsave)
+    println("steplength ", steplength)
     if error.value < -10
         @goto user_stop
     end
     number_of_eval.value += eval.value
     number_of_linesearch_eval.value += eval.value
-    println("evrest")
     evaluation_restart(current_point, u, number_of_parameters,
                        number_of_residuals, iteration_number, residuals!,
                        number_of_eval, current_residuals, d1_norm.value,
@@ -371,7 +371,6 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
     if restart.value || error.value == -1 || error.value == -5
         @goto iteration_loop
     end
-    println("move cons")
     move_violated_constraints(current_constraints, active_constraints,
                               number_of_active_constraints, min_l_n,
                               number_of_equality_constraints.value,
@@ -529,17 +528,22 @@ Replaces the subroutine STPLNG
 """
 function compute_steplength(restart::Bool, current_point::AbstractArray{Float64},
                     inactive_constraints_gradient::AbstractArray{Float64, 2},
-                    leading_dim_gradient::Int64, search_direction::AbstractArray{Float64},
+                            leading_dim_gradient::Int64,
+                            search_direction::AbstractArray{Float64},
                     number_of_parameters::Int64,
-                    current_residuals::AbstractArray{Float64}, v1::AbstractArray{Float64},
+                            current_residuals::AbstractArray{Float64},
+                            v1::AbstractArray{Float64},
                     number_of_residuals::Int64, sq_sum_residuals::Float64,
                     residuals!::Function, rank_c2::Int64, code::Int64,
-                    current_constraints::AbstractArray{Float64}, constraints!::Function,
+                            current_constraints::AbstractArray{Float64},
+                            constraints!::Function,
                     active_constraints::AbstractArray{Int64},
                     number_of_active_constraints::Int64,
-                    inactive_constraints::AbstractArray{Int64}, p4::AbstractArray{Int64},
+                            inactive_constraints::AbstractArray{Int64},
+                            p4::AbstractArray{Int64},
                     number_of_inactive_constraints::Int64,
-                    number_of_constraints::Int64, penalty_weights::AbstractArray{Float64},
+                            number_of_constraints::Int64,
+                            penalty_weights::AbstractArray{Float64},
                     old_penalty_weights::AbstractArray{Float64}, dim_a::Int64,
                     p_norm::Int64, number_of_householder::Int64,
                     psi::Number_wrapper{Float64},
@@ -550,8 +554,10 @@ function compute_steplength(restart::Bool, current_point::AbstractArray{Float64}
                     x_diff::Number_wrapper{Float64}, error::Number_wrapper{Int64},
                     index_upper_bound::Number_wrapper{Int64},
                     wh_norm::Number_wrapper{Float64},
-                    next_residuals::AbstractArray{Float64}, v2::AbstractArray{Float64},
-                    next_constraints::AbstractArray{Float64}, g::AbstractArray{Float64},
+                            next_residuals::AbstractArray{Float64},
+                            v2::AbstractArray{Float64},
+                            next_constraints::AbstractArray{Float64},
+                            g::AbstractArray{Float64},
                     ltp::Last_two_points, restart_steps::Restart_steps,
                     wsave::AbstractArray{Float64, 2})
 
@@ -709,7 +715,10 @@ function update_penalty_euc_norm(va::AbstractArray{Float64},
     ztw *= va_norm ^ 2
     if ztw >= mu
         if number_of_active_constraints == dim_a
-            @goto assort
+            assort(wsave, 100, number_of_constraints, 4,
+                   number_of_active_constraints,
+                   active_constraints, penalty_weights, old_penalty_weights)
+            return
 
         end
         ctrl = 2
@@ -728,10 +737,11 @@ function update_penalty_euc_norm(va::AbstractArray{Float64},
             end
             gamma -= y_el * penalty_weights[j]
         end
-        minimize_euclidean_norm(ctrl, penalty_weights, number_of_constraints, nrp,
-                                y, gamma, old_penalty_weights)
-
-        @goto assort
+        minimize_euclidean_norm(ctrl, penalty_weights, number_of_constraints,
+                                pset, nrp, y, gamma, old_penalty_weights)
+        assort(wsave, 100, number_of_constraints, 4, number_of_active_constraints,
+               active_constraints, penalty_weights, old_penalty_weights)
+        return
     end
 
     if number_of_active_constraints != dim_a
@@ -753,7 +763,9 @@ function update_penalty_euc_norm(va::AbstractArray{Float64},
         end
         minimize_euclidean_norm(ctrl, penalty_weights, number_of_constraints,
                             pset, nrp, y, tau, old_penalty_weights)
-        @goto assort
+        assort(wsave, 100, number_of_constraints, 4, number_of_active_constraints,
+               active_constraints, penalty_weights, old_penalty_weights)
+        return
     end
 
     ctrl = 1
@@ -761,10 +773,11 @@ function update_penalty_euc_norm(va::AbstractArray{Float64},
         pset[i] = active_constraints[i]
         y[i] = va[i] ^ 2 * va_norm ^ 2
     end
+    println("---")
+    println("LENGTH PSET, T ", length(pset), " ", number_of_active_constraints)
     minimize_euclidean_norm(ctrl, penalty_weights, number_of_constraints,
                             pset, number_of_active_constraints, y, mu,
                             old_penalty_weights)
-    @label assort
     assort(wsave, 100, number_of_constraints, 4, number_of_active_constraints,
            active_constraints, penalty_weights, old_penalty_weights)
     return
@@ -1458,7 +1471,6 @@ function compute_penalty_weights(penalty_weights::AbstractArray{Float64},
                                  next_constraints::AbstractArray{Float64},
                                  v2::AbstractArray{Float64},
                          wsave::AbstractArray{Float64, 2})
-    println("SIZE WSAVE", size(wsave))
     delta = 0.25
     if restart_in_old
         copyto!(penalty_weights, 1, old_penalty_weights, 1, number_of_constraints)
