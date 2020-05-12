@@ -1,6 +1,8 @@
-#This file contains the struct used to mimic the effect the different
+#This file contains the struct used to mimic the effect of fortran common bloc
+# and passing by reference
 import Base.==
 import Base.show
+
 """
 Replaces the common block PREC
 """
@@ -99,3 +101,4 @@ end
 ==(a::Number_wrapper{T}, b::T) where T = a.value == b
 ==(a::T, b::Number_wrapper{T}) where T = a == b.value
 ==(a::Number_wrapper{T}, b::Number_wrapper{T}) where T = a.value == b.value
+
