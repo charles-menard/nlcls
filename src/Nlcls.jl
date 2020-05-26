@@ -7,38 +7,38 @@ export nonlinear_least_square, easy_nlcls!
 Replaces the subroutine NLSNIP in dblmod2nls.f
 """
 function nonlinear_least_square(current_point::AbstractArray{Float64},
-                                number_of_parameters::Int64,
-                                leading_dim_c::Int64, leading_dim_a::Int64,
-                                leading_dim_g::Int64, leading_dim_f::Int64,
-                                number_of_residuals::Int64,
+                                number_of_parameters::Int,
+                                leading_dim_c::Int, leading_dim_a::Int,
+                                leading_dim_g::Int, leading_dim_f::Int,
+                                number_of_residuals::Int,
                                 (number_of_equality_constraints::
-                                 Number_wrapper{Int64}),
-                                number_of_constraints::Int64, tol::Float64,
+                                 Number_wrapper{Int}),
+                                number_of_constraints::Int, tol::Float64,
                                 penalty_weights::AbstractArray{Float64},
                                 eps_relative::Float64, eps_absolute::Float64,
                                 eps_point::Float64, eps_constraints::Float64,
-                                verbose::Int64, nout::Int64,
-                                maximum_iteration::Int64, p_norm::Int64,
-                                scale::Int64, hessian::Bool,
+                                verbose::Int, nout::Int,
+                                maximum_iteration::Int, p_norm::Int,
+                                scale::Int, hessian::Bool,
                                 residuals!::Function, constraints!::Function,
-                                exit::Number_wrapper{Int64},
+                                exit::Number_wrapper{Int},
                                 current_objective::Number_wrapper{Float64},
-                                iteration_number::Number_wrapper{Int64},
-                                number_of_eval::Number_wrapper{Int64},
-                                number_of_jac_eval::Number_wrapper{Int64},
-                                number_of_hessian_eval::Number_wrapper{Int64},
-                                number_of_linesearch_eval::Number_wrapper{Int64},
-                                rank_a::Number_wrapper{Int64},
-                                rank::Number_wrapper{Int64},
+                                iteration_number::Number_wrapper{Int},
+                                number_of_eval::Number_wrapper{Int},
+                                number_of_jac_eval::Number_wrapper{Int},
+                                number_of_hessian_eval::Number_wrapper{Int},
+                                number_of_linesearch_eval::Number_wrapper{Int},
+                                rank_a::Number_wrapper{Int},
+                                rank::Number_wrapper{Int},
                                 current_residuals::AbstractArray{Float64},
                                 current_constraints::AbstractArray{Float64},
-                                active_constraints::AbstractArray{Int64},
+                                active_constraints::AbstractArray{Int},
                                 convergence_factor::Number_wrapper{Float64},
-                                p1::AbstractArray{Int64},
-                                p2::AbstractArray{Int64},
-                                p3::AbstractArray{Int64},
-                                inactive_constraints::AbstractArray{Int64},
-                                p4::AbstractArray{Int64},
+                                p1::AbstractArray{Int},
+                                p2::AbstractArray{Int},
+                                p3::AbstractArray{Int},
+                                inactive_constraints::AbstractArray{Int},
+                                p4::AbstractArray{Int},
                                 b::AbstractArray{Float64},
                                 d1::AbstractArray{Float64},
                                 d2::AbstractArray{Float64},
@@ -60,33 +60,33 @@ function nonlinear_least_square(current_point::AbstractArray{Float64},
                                 gmat::AbstractArray{Float64, 2},
                                 ltp::Last_two_points,
                                 restart_steps::Restart_steps,
-                                ifree::Number_wrapper{Int64})
+                                ifree::Number_wrapper{Int})
     d1_norm = Number_wrapper{Float64}(0.)
     d_norm::Number_wrapper{Float64} = Number_wrapper(0.)
     b1_norm::Number_wrapper{Float64} = Number_wrapper(0.)
     beta_k = Number_wrapper(0.)
-    rank_c2 = Number_wrapper{Int64}(0)
+    rank_c2 = Number_wrapper{Int}(0)
     gn_direction_norm = Number_wrapper(0.)
     gres = Number_wrapper{Float64}(0.)
     deleted_constraints = Number_wrapper{Bool}(false)
     added_constraints = Number_wrapper(false)
-    time = Number_wrapper{Int64}(0)
+    time = Number_wrapper{Int}(0)
     sigmin = Number_wrapper{Float64}(0.)
     absvmx = Number_wrapper{Float64}(0.)
     wh_norm = Number_wrapper(0.0)
     gradient_norm = 0.0
-    code = Number_wrapper{Int64}(0)
-    eval = Number_wrapper{Int64}(0)
-    dim_a = Number_wrapper{Int64}(0)
+    code = Number_wrapper{Int}(0)
+    eval = Number_wrapper{Int}(0)
+    dim_a = Number_wrapper{Int}(0)
     dim_c2 = Number_wrapper(0)
     steplength = Number_wrapper{Float64}(0.)
     lower_bound_steplength = Number_wrapper{Float64}(0)
     upper_bound_steplength = Number_wrapper{Float64}(0)
     current_psi = Number_wrapper(0.0)
-    index_upper_bound = Number_wrapper{Int64}(0)
-    number_of_active_constraints = Number_wrapper{Int64}(0)
-    lmt = Number_wrapper{Int64}(0)
-    number_of_householder = Number_wrapper{Int64}(0)
+    index_upper_bound = Number_wrapper{Int}(0)
+    number_of_active_constraints = Number_wrapper{Int}(0)
+    lmt = Number_wrapper{Int}(0)
+    number_of_householder = Number_wrapper{Int}(0)
     #common wsave, check if all sub that use it are called just in enlsip
     wsave = Array{Float64, 2}(undef, 100, 4)
  
@@ -381,8 +381,8 @@ end
 
 """
 function easy_nlcls!(first_approximation::Array{Float64},
-                    number_of_residuals::Int64, number_of_constraints::Int64,
-                    number_of_equality_constraints::Int64,
+                    number_of_residuals::Int, number_of_constraints::Int,
+                    number_of_equality_constraints::Int,
                     residuals!::Function, constraints!::Function,
                     jac_residuals!::Function, jac_constraints!::Function)
     rpc = number_of_residuals + number_of_constraints
@@ -391,7 +391,7 @@ function easy_nlcls!(first_approximation::Array{Float64},
     penalty_weights = Array{Float64}(undef, number_of_constraints)
     current_residuals = Array{Float64}(undef, rpc)
     current_constraints = Array{Float64}(undef, number_of_constraints)
-    active_constraints = Array{Int64}(undef, act)
+    active_constraints = Array{Int}(undef, act)
     res = easy_nlcls!(first_approximation, number_of_residuals, residuals!,
                      constraints!, number_of_equality_constraints,
                      penalty_weights, current_residuals, current_constraints,
@@ -414,14 +414,14 @@ residuals/constraints at x and return the result in f/ h
     
 """
 function easy_nlcls!(first_approximation::Array{Float64},
-                    number_of_residuals::Int64,
+                    number_of_residuals::Int,
                     residuals!::Function,
                     constraints!::Function,
-                    number_of_equality_constraints::Int64,
+                    number_of_equality_constraints::Int,
                     penalty_weights::Array{Float64},
                     current_residuals::Array{Float64},
                     current_constraints::Array{Float64},
-                    active_constraints::Array{Int64},
+                    active_constraints::Array{Int},
                     jac_residuals!::Union{Function, Nothing}=nothing,
                     jac_constraints!::Union{Function, Nothing}=nothing)
     number_of_active_constraints = Number_wrapper(number_of_equality_constraints)
@@ -455,10 +455,10 @@ function easy_nlcls!(first_approximation::Array{Float64},
     #---------------------
     #we wrap the constraints in residuals function in other function
     # usable by nonlinear_least_squares
-    function hfunc!(current_point::Array{Float64}, number_of_parameters::Int64,
+    function hfunc!(current_point::Array{Float64}, number_of_parameters::Int,
                    current_constraints::Array{Float64},
-                   number_of_constraints::Int64, ctrl::Number_wrapper{Int64},
-                   jacobian::Array{Float64, 2}, leading_dim_c::Int64,)
+                   number_of_constraints::Int, ctrl::Number_wrapper{Int},
+                   jacobian::Array{Float64, 2}, leading_dim_c::Int,)
         if ctrl.value == 1
             constraints!(current_point, current_constraints)
             #if uncomputable ctrl == -1
@@ -477,10 +477,10 @@ function easy_nlcls!(first_approximation::Array{Float64},
             return
         end
     end
-    function ffunc!(current_point::Array{Float64}, number_of_parameters::Int64,
+    function ffunc!(current_point::Array{Float64}, number_of_parameters::Int,
                    current_residuals::Array{Float64},
-                   number_of_residuals::Int64, ctrl::Number_wrapper{Int64},
-                   jacobian::Array{Float64, 2}, leading_dim_c::Int64,)
+                   number_of_residuals::Int, ctrl::Number_wrapper{Int},
+                   jacobian::Array{Float64, 2}, leading_dim_c::Int,)
         if ctrl.value == 1
             residuals!(current_point, current_residuals)
             #if uncomputable ctrl == -1
@@ -501,29 +501,29 @@ function easy_nlcls!(first_approximation::Array{Float64},
     end
     #---------------
 
-    number_of_iterations = Number_wrapper{Int64}(0)
-    number_of_eval = Number_wrapper{Int64}(0)
-    number_of_jac_eval = Number_wrapper{Int64}(0)
-    number_of_hessian_eval = Number_wrapper{Int64}(0)
-    number_of_linesearch_eval = Number_wrapper{Int64}(0)
-    rank_a = Number_wrapper{Int64}(0)
-    rank_ac = Number_wrapper{Int64}(0)
+    number_of_iterations = Number_wrapper{Int}(0)
+    number_of_eval = Number_wrapper{Int}(0)
+    number_of_jac_eval = Number_wrapper{Int}(0)
+    number_of_hessian_eval = Number_wrapper{Int}(0)
+    number_of_linesearch_eval = Number_wrapper{Int}(0)
+    rank_a = Number_wrapper{Int}(0)
+    rank_ac = Number_wrapper{Int}(0)
     objective_at_termination = Number_wrapper{Float64}(0.)
     convergence_factor = Number_wrapper{Float64}(0.)
     ltp = Last_two_points(0, 0, 0, 0, 0, 0, 0, 0,
                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     restart_steps = Restart_steps(0.0, 0.0, 0, 0)
-    ifree = Number_wrapper{Int64}(0)
+    ifree = Number_wrapper{Int}(0)
     for i in 1:number_of_constraints
         penalty_weights[i] = 0.0
     end
     mpl = number_of_residuals + number_of_constraints
-    p1 = Array{Int64}(undef, min_l_n)
-    p2 = Array{Int64}(undef, min_l_n)
-    p3 = Array{Int64}(undef, number_of_parameters)
-    inactive_constraints = Array{Int64}(undef, number_of_constraints)
-    p4 = Array{Int64}(undef, number_of_constraints)
+    p1 = Array{Int}(undef, min_l_n)
+    p2 = Array{Int}(undef, min_l_n)
+    p3 = Array{Int}(undef, number_of_parameters)
+    inactive_constraints = Array{Int}(undef, number_of_constraints)
+    p4 = Array{Int}(undef, number_of_constraints)
     old_penalty_weights = Array{Float64}(undef, number_of_constraints)
     s = Array{Float64}(undef, max(number_of_constraints, number_of_parameters))
     #in the original code b is length = min_l_n but some functions need

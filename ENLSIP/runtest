@@ -1,0 +1,2 @@
+f77 -O -o test test.f dblenls.f dblmod2nls.f dblredunls.f dblwrkset.f
+./test
