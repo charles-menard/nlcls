@@ -446,8 +446,11 @@ end
 
 """
 Replaces the subroutine ASSORT in dblmod2nls.f
+
+modifies :
+u
 """
-function assort(u::AbstractArray{Float64, 2}, l::Int, s::Int,
+function assort(u::AbstractArray{Float64, 2}, s::Int,
                 t::Int, active_constraints::AbstractArray{Int},
                 penalty_weights::AbstractArray{Float64})
     k = 0
@@ -459,7 +462,7 @@ function assort(u::AbstractArray{Float64, 2}, l::Int, s::Int,
             if w_k <= u[k, y]
                 continue
             end
-            for z = s:y+1:-1
+            for z = s:-1:y+1
                 u[k, z] = u[k, z-1]
             end
             u[k, y] = w_k
