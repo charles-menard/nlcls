@@ -676,13 +676,16 @@ function subspace_dimension(restart::Bool, sq_sum_residuals::Float64,
                             c::AbstractArray{Float64, 2}, leading_dim_c::Int,
                             number_of_residuals::Int,
                             number_of_parameters::Int, rank_c2::Int,
-                            current_residuals::AbstractArray{Float64}, p3::AbstractArray{Int},
-                            d3::AbstractArray{Float64}, a::AbstractArray{Float64, 2},
+                            current_residuals::AbstractArray{Float64},
+                            p3::AbstractArray{Int},
+                            d3::AbstractArray{Float64},
+                            a::AbstractArray{Float64, 2},
                             leading_dim_a::Int,
                             number_of_active_constraints::Int, rank_a::Float64,
                             sq_sum_constraints::Float64, p1::AbstractArray{Int},
                             d2::AbstractArray{Float64}, p2::AbstractArray{Int},
-                            b::AbstractArray{Float64}, fmat::AbstractArray{Float64, 2},
+                            b::AbstractArray{Float64},
+                            fmat::AbstractArray{Float64, 2},
                             leading_dim_f::Int, pivot::AbstractArray{Float64},
                             gmat::AbstractArray{Float64, 2}, leading_dim_g::Int,
                             d::AbstractArray{Float64}, dx::AbstractArray{Float64},
@@ -705,16 +708,14 @@ function subspace_dimension(restart::Bool, sq_sum_residuals::Float64,
 
     etaa = Number_wrapper(1.0)
     etac = Number_wrapper{Float64}(0.)
-    if rank_a <= 0
-        #goto 50
-    end
-    if (number_of_active_constraints <= rank_a
+    if (rank_a > 0
+        && number_of_active_constraints <= rank_a
         && restart_steps.nrrest <= 1)
         l_to_upper_triangular(a, leading_dim_a, rank_a,
                               number_of_active_constraints, b,
                               leading_dim_g, p2, gmat, d2)
         v_times_p(c, number_of_residuals, rank_a, p2)
-        r11td1 = r_transpose_times_d_norm(a, leading_dim_a, rank_a, b)
+        r11td1 = r_transpose_times_d_norm(a, rank_a, b)
         for i = 1:rank_c2
             k = rank_a + i
             d3_i_dummy.value = d3[i]
@@ -725,30 +726,31 @@ function subspace_dimension(restart::Bool, sq_sum_residuals::Float64,
             d3[i] = d3_i_dummy.value
             c[i, k] = c_ik_dummy.value
         end
-        r22td2 = r_transpose_times_d_norm(view(c, :, rank_a+1), leading_dim_c,
-                                          rank_c2, d)
+        r22td2 = r_transpose_times_d_norm(view(c, :, rank_a+1), rank_c2, d)
         for i = 1:number_of_residuals
             d[i] = -current_residuals[i]
         end
     end
-    copyto!(dx, 1, b, 1, rank_a)
-    #30
-
-    drkm1 = abs(ltp.rkakm1) + number_of_active_constraints - ltp.tkm1
-    b1aspr = BLAS.nrm2(drkm1, b, 1)
-
-    hpgrs = ltp.hsqkm1 - sq_sum_constraints
-    if !restart && r11td1 < beta1 * r22td2
-        dim_a.value = 0
-    else
-        compute_solving_dim(restart, drkm1, hpgrs, rank_a, gmat,
-                            leading_dim_g, dx, work_area,
-                           ltp.b1km1, b1aspr, ltp.alfkm1, dim_a, etaa)
+    if rank_a > 0
+        copyto!(dx, 1, b, 1, rank_a)
+        #30
+        
+        drkm1 = abs(ltp.rkakm1) + number_of_active_constraints - ltp.tkm1
+        b1aspr = BLAS.nrm2(drkm1, b, 1)
+        
+        hpgrs = ltp.hsqkm1 - sq_sum_constraints
+        if !restart && r11td1 < beta1 * r22td2
+            dim_a.value = 0
+        else
+            compute_solving_dim(restart, drkm1, hpgrs, rank_a, gmat,
+                                leading_dim_g, dx, work_area,
+                                ltp.b1km1, b1aspr, ltp.alfkm1, dim_a, etaa)
+        end
+        
+        copyto!(dx, 1, b, 1, rank_a)
+        upper_trianguar_solve(dim_a, gmat, dx)
+        d_minus_c1_times_x1(dim_a, number_of_residuals, d, c, dx)
     end
-
-    copyto!(dx, 1, b, 1, rank_a)
-    upper_trianguar_solve(dim_a, gmat, dx)
-    d_minus_c1_times_x1(dim_a, number_of_residuals, d, c, dx)
     #50
     dim_c2.value = rank_c2
     
@@ -820,8 +822,8 @@ end
 """
 Replaces the subroutine RTD in dblmod2nls.f
 """
-function r_transpose_times_d_norm(r::AbstractArray{Float64, 2}, leading_dim_r::Int,
-                                  n::Int, d::AbstractArray{Float64})
+function r_transpose_times_d_norm(r::AbstractArray{Float64, 2}, n::Int,
+                                  d::AbstractArray{Float64})
     sum = 0.0
     sum2 = 0.0
     for j = 1:n
@@ -1326,13 +1328,13 @@ function update_active_constraints(a::AbstractArray{Float64, 2},
                         number_of_active_constraints,
                         number_of_inactive_constraints, j.value)
         equal(minus_active_constraints, number_of_constraints, a,
-              leading_dim_a, number_of_parameters, active_constraints,
+              number_of_parameters, active_constraints,
               number_of_active_constraints.value, number_of_equality_constraints,
               p4)
         gradient(jac_residuals, number_of_residuals, number_of_parameters,
                  current_residuals, gradient_objective)
-        scale_system(scale, a, leading_dim_a, number_of_active_constraints.value,
-                     number_of_parameters, minus_active_constraints,
+        scale_system(scale, a, leading_dim_a, number_of_parameters,
+                     minus_active_constraints,
                      scaing_matrix)
         unscramble_array(active_constraints, min_l_n, number_of_constraints,
                          number_of_equality_constraints)
@@ -1477,9 +1479,11 @@ function new_point(current_point::AbstractArray{Float64},
 end
 """
 Replaces the subroutine EQUAL in dblreduns.f
+
+modifies: b, a, p4
 """
 function equal(b::AbstractArray{Float64}, l::Int, a::AbstractArray{Float64,2},
-                leading_dim_a::Int, n::Int, active_constraints::AbstractArray{Int},
+                n::Int, active_constraints::AbstractArray{Int},
                 t::Int, p::Int, p4::AbstractArray{Int})
     if l > 0
         for i=1:l
@@ -1509,6 +1513,8 @@ function equal(b::AbstractArray{Float64}, l::Int, a::AbstractArray{Float64,2},
             end
             ik = j
         end
+        p4[ik] = ip
+        p4[index] = i
     end
 
 end
@@ -1517,9 +1523,10 @@ end
 Replaces the subroutine EVSCAL in dblreduns.f
 C     SCALE THE SYSTEM  A*DX = B    IF SO INDICATED BY FORMING
 C     A@D=DIAG*A      B@D=DIAG*B
+
+modifies jacobian, neg_constraints, scaling_matrix
 """
 function scale_system(scale::Int, jacobian::AbstractArray{Float64,2},
-                      leading_dim_jacobian::Int,
                       number_of_active_constraints::Int,
                       number_of_parameters::Int,
                       neg_constraints::AbstractArray{Float64},
